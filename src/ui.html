@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F5ECD7">
+<title>Krungu</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shrikhand&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* palette: your two colors + warm paper neutrals + one mustard accent */
+    --teal:#287A74;  --teal-deep:#1B4F4B;  --teal-soft:#BFDCD3;
+    --orange:#FF8C52; --orange-soft:#FFD3B8;
+    --mustard:#F2B84B;
+    --paper:#F5ECD7; --paper-2:#EBDDBD;
+    --ink:#1F3533;   --mute:#6B7A73;
+    --display:"Shrikhand", Georgia, serif;
+    --mono:"Space Mono", ui-monospace, "Courier New", monospace;
+    --line:2px solid var(--ink);
+    --pop:4px 4px 0 var(--ink);
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html { background:var(--paper); }
+  body {
+    margin:0; min-height:100dvh; color:var(--ink); font:400 14px/1.5 var(--mono);
+    background:
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .12 0 0 0 0 .2 0 0 0 0 .2 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"),
+      var(--paper);
+    display:flex; justify-content:center;
+  }
+  main { width:100%; max-width:480px; min-height:100dvh; display:flex; flex-direction:column;
+         padding:max(20px, env(safe-area-inset-top)) 18px max(24px, env(safe-area-inset-bottom)); }
+  .hidden { display:none !important; }
+
+  /* retro stripe band, used as a divider under the logo */
+  .stripes { height:14px; margin:10px 0 0; border:var(--line); border-radius:99px;
+             background:linear-gradient(90deg, var(--teal) 0 33%, var(--orange) 33% 66%, var(--mustard) 66% 100%); }
+  .logo { font:400 40px/1 var(--display); color:var(--teal); margin:0; letter-spacing:.5px; text-shadow:3px 3px 0 var(--orange); }
+
+  /* ---------- onboarding ---------- */
+  #onboarding { flex:1; display:flex; flex-direction:column; }
+  .sub { margin:14px 0 4px; color:var(--ink); }
+  h2 { font:700 12px/1 var(--mono); text-transform:uppercase; letter-spacing:2px; color:var(--teal-deep); margin:24px 0 12px; display:flex; align-items:center; gap:10px; }
+  h2::after { content:""; flex:1; border-top:2px dotted var(--teal); }
+  .chips { display:flex; flex-wrap:wrap; gap:9px; }
+  .chip { font:700 13px/1 var(--mono); color:var(--ink); background:#FFF8E8; border:var(--line); border-radius:99px; padding:10px 14px; min-height:40px; cursor:pointer;
+          box-shadow:2px 2px 0 var(--ink); transition:transform .08s, box-shadow .08s, background .15s; }
+  .chip:active { transform:translate(2px,2px); box-shadow:0 0 0 var(--ink); }
+  .chip.on { background:var(--teal); color:var(--paper); transform:translate(2px,2px); box-shadow:0 0 0 var(--ink); }
+  .chip.on::before { content:"✓ "; }
+  .cta { position:sticky; bottom:0; margin-top:auto; padding:22px 0 0;
+         background:linear-gradient(to top, var(--paper) 70%, transparent); }
+  button.primary { width:100%; min-height:56px; font:400 22px/1 var(--display); letter-spacing:.5px; color:var(--ink); background:var(--orange);
+                   border:var(--line); border-radius:16px; box-shadow:var(--pop); cursor:pointer; transition:transform .08s, box-shadow .08s, opacity .2s; }
+  button.primary:active:not(:disabled) { transform:translate(4px,4px); box-shadow:0 0 0 var(--ink); }
+  button.primary:disabled { background:var(--paper-2); color:var(--mute); box-shadow:2px 2px 0 var(--mute); border-color:var(--mute); cursor:default; }
+
+  /* ---------- player ---------- */
+  #player { flex:1; display:flex; flex-direction:column; align-items:center; text-align:center; }
+  #player header { width:100%; text-align:left; }
+  .stage { flex:1; width:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:22px; padding:18px 0; }
+
+  .art { position:relative; width:min(72vw, 300px); aspect-ratio:1; border-radius:50%; border:var(--line); box-shadow:var(--pop), 0 0 0 8px var(--paper-2), 0 0 0 10px var(--ink);
+         background:
+           radial-gradient(circle, transparent 0 34%, rgba(245,236,215,.10) 34.4% 35%, transparent 35.4% 100%),
+           repeating-radial-gradient(circle at center, #243B39 0 2px, #2D4744 2px 4px);
+         display:grid; place-items:center; }
+  .art::before { /* light sheen on the vinyl */
+    content:""; position:absolute; inset:0; border-radius:50%;
+    background:conic-gradient(from 20deg, transparent 0 20%, rgba(255,255,255,.14) 25%, transparent 30% 70%, rgba(255,255,255,.14) 75%, transparent 80%); }
+  .art > div { position:relative; width:36%; aspect-ratio:1; border-radius:50%; border:var(--line);
+               background:radial-gradient(circle, var(--paper) 0 7%, var(--ink) 7.5% 10%, transparent 10.5%),
+                          conic-gradient(var(--orange) 0 50%, var(--mustard) 50% 100%); }
+  .art.spin { animation:rot 5s linear infinite; }
+  @keyframes rot { to { transform:rotate(360deg); } }
+
+  .meta { width:100%; min-height:92px; }
+  #title { font:400 clamp(24px, 7.2vw, 32px)/1.1 var(--display); color:var(--teal-deep); margin:0 0 8px; overflow-wrap:anywhere;
+           display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; min-height:1.1em; }
+  #artist { margin:0; font-weight:700; text-transform:uppercase; letter-spacing:1.5px; font-size:12px; color:var(--ink); }
+  #artist:not(:empty)::before, #artist:not(:empty)::after { content:"★"; color:var(--orange); margin:0 8px; }
+
+  .progress { width:100%; }
+  .bar { height:14px; background:#FFF8E8; border:var(--line); border-radius:99px; overflow:hidden; }
+  .bar > div { height:100%; width:0; background:repeating-linear-gradient(-45deg, var(--teal) 0 6px, var(--teal-deep) 6px 12px); transition:width .25s linear; }
+  .time { margin-top:8px; font-size:12px; font-weight:700; color:var(--teal-deep); font-variant-numeric:tabular-nums; letter-spacing:1px; }
+
+  .controls { display:flex; flex-direction:column; align-items:center; gap:12px; padding-bottom:6px; }
+  #spin { width:128px; height:128px; border-radius:50%; font:400 26px/1 var(--display); letter-spacing:1px; color:var(--ink); cursor:pointer;
+          background:radial-gradient(circle at 35% 30%, #FFB184 0, var(--orange) 55%);
+          border:var(--line); box-shadow:var(--pop), inset 0 0 0 6px var(--orange), inset 0 0 0 8px var(--ink);
+          transition:transform .08s, box-shadow .08s, opacity .2s; }
+  #spin:active:not(:disabled) { transform:translate(4px,4px); box-shadow:0 0 0 var(--ink), inset 0 0 0 6px var(--orange), inset 0 0 0 8px var(--ink); }
+  #spin:disabled { opacity:.55; cursor:default; }
+  #status { min-height:20px; font-size:12px; color:var(--teal-deep); font-weight:700; }
+
+  footer { margin-top:14px; display:flex; justify-content:center; gap:22px; }
+  footer button { background:none; border:0; padding:8px; color:var(--mute); font:400 12px var(--mono); cursor:pointer; text-decoration:underline dotted; }
+  pre { width:100%; text-align:left; background:#FFF8E8; border:var(--line); border-radius:12px; padding:12px; font:12px/1.4 var(--mono); overflow:auto; max-height:260px; white-space:pre-wrap; }
+
+  @media (prefers-reduced-motion:reduce) { .art.spin { animation:none; } * { transition:none !important; } }
+  @media (max-height:640px) { .art { width:min(52vw, 220px); } #spin { width:104px; height:104px; font-size:22px; } }
+</style>
+</head>
+<body>
+<main>
+  <section id="onboarding" class="hidden">
+    <h1 class="logo">Krungu</h1>
+    <div class="stripes"></div>
+    <p class="sub">Pilih beberapa genre dan artis. Setelah itu tinggal dengarkan.</p>
+    <h2>Genre</h2><div class="chips" id="genres"></div>
+    <h2>Artis</h2><div class="chips" id="artists"></div>
+    <div class="cta"><button class="primary" id="start" disabled>Mulai</button></div>
+  </section>
+
+  <section id="player" class="hidden">
+    <header>
+      <h1 class="logo">Krungu</h1>
+      <div class="stripes"></div>
+    </header>
+    <div class="stage">
+      <div class="art" id="art"><div></div></div>
+      <div class="meta">
+        <p id="title"></p>
+        <p id="artist"></p>
+      </div>
+      <div class="progress">
+        <div class="bar"><div id="fill"></div></div>
+        <div class="time" id="time">0:00</div>
+      </div>
+    </div>
+    <div class="controls">
+      <button id="spin">SPIN</button>
+      <div id="status"></div>
+    </div>
+    <footer>
+      <button id="dbg">debug</button>
+      <button id="reset">mulai ulang</button>
+    </footer>
+    <pre id="dbgout" class="hidden"></pre>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const LS = "krungu.user";
+let userId = null;
+// The anonymous user id lives in localStorage AND a 1-year cookie (cookies survive when localStorage is cleared/blocked
+// and are shared across ports on the same host). Either one is enough to recognise the listener again.
+const UUID = /^[0-9a-f-]{36}$/;
+function loadUser() {
+  let v = null;
+  try { v = localStorage.getItem(LS); } catch {}
+  if (!v || !UUID.test(v)) v = document.cookie.match(new RegExp(`(?:^|; )${LS}=([0-9a-f-]{36})`))?.[1] ?? null;
+  return v && UUID.test(v) ? v : null;
+}
+function saveUser(id) {
+  try { id ? localStorage.setItem(LS, id) : localStorage.removeItem(LS); } catch {}
+  document.cookie = `${LS}=${id ?? ""}; path=/; SameSite=Lax; max-age=${id ? 31536000 : 0}`;
+}
+let cur = null;       // { track, el }  currently playing
+let next = null;       // Promise<{ track, el }> prefetched in the background
+let busy = false;
+
+const api = async (path, opts) => {
+  const r = await fetch(path, opts);
+  const body = await r.json().catch(() => ({}));
+  if (!r.ok) throw Object.assign(new Error(body.error || r.statusText), { status: r.status });
+  return body;
+};
+const fmt = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+const setStatus = (t) => { $("status").textContent = t || ""; };
+
+// ---------- onboarding ----------
+async function showOnboarding() {
+  $("player").classList.add("hidden");
+  $("onboarding").classList.remove("hidden");
+  const o = await api("/onboarding");
+  const picked = { genres: new Set(), artists: new Set() };
+  const render = (box, items, set, label) => {
+    box.innerHTML = "";
+    for (const it of items) {
+      const key = it.id ?? it;
+      const b = document.createElement("button");
+      b.className = "chip"; b.textContent = label(it);
+      b.onclick = () => { set.has(key) ? set.delete(key) : set.add(key); b.classList.toggle("on"); $("start").disabled = !(picked.genres.size + picked.artists.size); };
+      box.appendChild(b);
+    }
+  };
+  render($("genres"), o.genres, picked.genres, (g) => g);
+  render($("artists"), o.artists, picked.artists, (a) => a.name);
+  $("start").onclick = async () => {
+    $("start").disabled = true;
+    const r = await api("/users", { method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ genres: [...picked.genres], artistIds: [...picked.artists] }) });
+    userId = r.userId; saveUser(userId);
+    showPlayer(true);
+  };
+}
+
+// ---------- fetching the next track (pick + resolve audio + buffer) ----------
+async function loadNext() {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    let track;
+    try { track = await api(`/users/${userId}/next`); } catch (e) { if (e.status === 404) { reset(); throw e; } continue; }
+    let audio;
+    try { audio = await api(`/tracks/${track.trackId}/audio`); } catch { continue; } // no acceptable YouTube match: try another
+    const el = new Audio();
+    el.preload = "auto";
+    el.src = audio.url;
+    const ready = await new Promise((res) => {
+      el.addEventListener("canplay", () => res(true), { once: true });
+      el.addEventListener("error", () => res(false), { once: true });
+      setTimeout(() => res(false), 15000);
+    });
+    if (ready) return { track, el };
+  }
+  throw new Error("tidak menemukan lagu yang bisa diputar");
+}
+
+// ---------- playback ----------
+function begin(item) {
+  cur = item;
+  const { track, el } = item;
+  $("title").textContent = track.title;
+  $("artist").textContent = track.artist;
+  $("art").classList.add("spin");
+  document.title = `${track.title} · Krungu`;
+  if ("mediaSession" in navigator) {
+    navigator.mediaSession.metadata = new MediaMetadata({ title: track.title, artist: track.artist });
+    navigator.mediaSession.setActionHandler("nexttrack", spin);
+    navigator.mediaSession.setActionHandler("previoustrack", null);
+  }
+  let prefetched = false;
+  el.ontimeupdate = () => {
+    const d = el.duration || track.durationMs / 1000;
+    $("fill").style.width = `${Math.min(100, (el.currentTime / d) * 100)}%`;
+    $("time").textContent = `${fmt(el.currentTime)} / ${fmt(d)}`;
+    // After the early-skip window, line up the next track so a spin (or the song ending) is instant.
+    if (!prefetched && el.currentTime >= 12) { prefetched = true; next = loadNext().catch(() => null); }
+  };
+  el.onended = () => finish("complete");
+  el.onerror = () => { setStatus("lagu gagal diputar, lanjut..."); advance(); }; // no event: it never really played
+  el.play().catch(() => setStatus("tekan SPIN untuk mulai"));
+}
+
+function sendEvent(action, listenedMs) {
+  if (!cur) return;
+  fetch(`/users/${userId}/events`, { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ trackId: cur.track.trackId, action, listenedMs: Math.round(listenedMs), mode: cur.track.mode }) }).catch(() => {});
+}
+
+async function finish(action) {
+  if (!cur || busy) return;
+  const { el, track } = cur;
+  const listened = action === "complete" ? track.durationMs : el.currentTime * 1000;
+  el.pause(); el.ontimeupdate = el.onended = el.onerror = null;
+  sendEvent(action, listened);
+  advance();
+}
+
+async function advance() {
+  busy = true; $("spin").disabled = true;
+  try {
+    const wasReady = next;
+    setStatus(wasReady ? "" : "memilih lagu...");
+    const item = await (next ?? loadNext());
+    next = null;
+    if (!item) throw new Error("gagal menyiapkan lagu");
+    setStatus("");
+    begin(item);
+  } catch (e) { setStatus(e.message); }
+  finally { busy = false; $("spin").disabled = false; }
+}
+
+const spin = () => finish("spin");
+
+function showPlayer(fresh) {
+  $("onboarding").classList.add("hidden");
+  $("player").classList.remove("hidden");
+  if (fresh) advance(); else { setStatus("tekan SPIN untuk mulai"); }
+}
+
+function reset() { saveUser(null); userId = null; cur = null; next = null; location.reload(); }
+
+$("spin").onclick = () => { cur ? spin() : advance(); };
+$("reset").onclick = () => { if (confirm("Mulai ulang dari onboarding? Profil lama tidak dipakai lagi.")) reset(); };
+$("dbg").onclick = async () => {
+  const box = $("dbgout");
+  box.classList.toggle("hidden");
+  if (!box.classList.contains("hidden")) {
+    const d = await api(`/users/${userId}/debug`);
+    box.textContent = JSON.stringify({ ...d, nowPlaying: cur && { ...cur.track } }, null, 2);
+  }
+};
+
+// ---------- start ----------
+userId = loadUser();
+saveUser(userId); // re-save so both stores stay in sync and the cookie expiry is refreshed
+navigator.storage?.persist?.().catch(() => {});
+if (userId) showPlayer(false); else showOnboarding();
+</script>
+</body>
+</html>

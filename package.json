@@ -1,0 +1,33 @@
+{
+  "name": "krungu",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "typecheck": "bun check",
+    "seed": "bun run src/seed.ts",
+    "seed:id": "bun run src/seed-id.ts",
+    "country": "bun run src/country.ts",
+    "seed:related": "bun run src/seed-related.ts",
+    "years": "bun run src/years.ts",
+    "audio": "bun run src/audio-feats.ts",
+    "clean": "bun run src/clean.ts",
+    "tags": "bun run src/enrich-tags.ts",
+    "moods": "bun run src/moods.ts",
+    "sim": "bun run src/sim.ts",
+    "sim:moody": "bun run src/sim-moody.ts",
+    "replay": "bun run src/replay.ts",
+    "trace": "bun run src/trace.ts",
+    "export": "bun run src/export.ts",
+    "serve": "bun run src/server.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "dependencies": {
+    "youtubei.js": "^18.3.0"
+  }
+}

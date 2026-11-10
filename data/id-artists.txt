@@ -1,0 +1,210 @@
+# One artist per line. Lines starting with # are ignored.
+# Pop / band modern
+Dewa 19
+Sheila On 7
+Noah
+Peterpan
+Ungu
+Padi
+Naif
+Slank
+Gigi
+Ada Band
+d'Masiv
+Kotak
+Radja
+ST12
+Wali
+Hijau Daun
+Nidji
+Letto
+Armada
+Vierra
+The Rain
+Samsons
+Kangen Band
+Yovie & Nuno
+Base Jam
+Jikustik
+Dewa
+Cokelat
+Java Jive
+Superman Is Dead
+Pee Wee Gaskins
+The Changcuters
+Jamrud
+Boomerang
+/rif
+Seventeen
+Geisha
+Repvblik
+Tipe-X
+Barasuara
+Sore
+Efek Rumah Kaca
+Float
+Banda Neira
+Mocca
+The Adams
+Kunto Aji
+Hindia
+Lomba Sihir
+.Feast
+Majelis Lidah Berduri
+Reality Club
+Juicy Luicy
+Fourtwnty
+Sal Priadi
+Nadin Amizah
+Pamungkas
+Arsy Widianto
+Mahalini
+Tulus
+Raisa
+Isyana Sarasvati
+Afgan
+Rossa
+Agnez Mo
+Rizky Febian
+Judika
+Andmesh
+Lyodra
+Tiara Andini
+Ziva Magnolya
+Anggi Marito
+Yura Yunita
+Rara Sekar
+Maudy Ayunda
+Citra Scholastika
+Bernadya
+Tami Aulia
+Adrian Khalif
+# not on Deezer: Vidi Aldiano
+Marcell
+Glenn Fredly
+Rio Febrian
+Ari Lasso
+Titi DJ
+Krisdayanti
+Anang
+Ashanty
+Syahrini
+Rhoma Irama
+Mulan Jameela
+Ghea Indrawari
+Rizky Ridho
+Fiersa Besari
+Hivi!
+# not on Deezer: Kahitna
+Chrisye
+Iwan Fals
+Bimbo
+Koes Plus
+God Bless
+Sheila Majid
+Dian Piesesha
+Broery Marantika
+Vina Panduwinata
+Nike Ardilla
+Krisdayanti
+Kla Project
+Dere
+Aurelie Moeremans
+Ruth Sahanaya
+Titiek Puspa
+# Dangdut / koplo / campursari
+Denny Caknan
+Happy Asmara
+Guyon Waton
+Ndarboy Genk
+Didi Kempot
+Via Vallen
+Nella Kharisma
+Gerry Mahesa
+Lesti
+Rhoma Irama
+Elvy Sukaesih
+Inul Daratista
+Cak Percil
+Abah Lala
+Tri Suaka
+Woro Widowati
+Anggun
+Danar Widianto
+Fauzana
+Farel Prayoga
+Ndx A.K.A
+Dike Sabrina
+Shinta Arsinta
+Rena Movies
+# Hip-hop / R&B / elektronik
+Rich Brian
+NIKI
+Stephanie Poetri
+Weird Genius
+Matter Mos
+Ramengvrl
+Yacko
+Kaleb J
+Lil Ben
+Jason Ranti
+# not on Deezer: Rapel
+Dipha Barus
+# Religi / lainnya
+Opick
+Sabyan
+Maher Zain
+Nissa Sabyan
+# not on Deezer: Gamal Al-Ghazali
+# not on Deezer: Hadad Alwi
+Haddad Alwi
+JKT48
+# Pop / rock klasik 90-an dan 2000-an (ditambah untuk menambah cakupan era lama)
+Potret
+Ello
+Sherina
+Melly Goeslaw
+Bunga Citra Lestari
+Andra and The Backbone
+Drive
+Matta
+Ratu
+The Titans
+Ten2Five
+Gita Gutawa
+Dygta
+Audy
+Maia Estianty
+Dewi Sandra
+Tompi
+Pongki Barata
+Netral
+Pas Band
+Elpamas
+Power Slaves
+Edane
+Kuburan
+Plastik
+Saint Loco
+Rocket Rockers
+Fariz RM
+Harvey Malaiholo
+Ebiet G. Ade
+Rinto Harahap
+Betharia Sonata
+Obbie Messakh
+Nicky Astria
+Mus Mujiono
+Utha Likumahuwa
+Gombloh
+# Dangdut klasik / 2000-an
+Meggy Z
+Evie Tamala
+Camelia Malik
+Iis Dahlia
+Rita Sugiarto
+A. Rafiq
+Ayu Ting Ting
+Cita Citata
+Trio Macan
+Ratih Purwasih
