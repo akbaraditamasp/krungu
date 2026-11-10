@@ -43,6 +43,7 @@ export const cfg = {
   probe: num("PROBE", 1) === 1,   // diversify picks at session start / after a run of negatives
   divW: num("DIV_W", 0.5),        // diversity penalty strength while probing
   gapMs: 30 * 60_000,             // silence longer than this starts a new session
+  cooldownMs: num("COOLDOWN_H", 24) * 3_600_000, // a track played within this time is not served again; spinning such a repeat means "heard it already", not "dislike"
 };
 
 // ---------- feature vocabulary (LinUCB dimension) ----------
@@ -179,6 +180,8 @@ export class Profile {
   spins = 0;
   baseline = 0.55;                     // running average outcome of this user (see record)
   spinStreak = 0;
+  played = new Map<number, number>();  // track id -> last time (ms) it was played; NOT saved in the profile: the server
+                                       // rebuilds it from the events table (see hydratePlayed) so the profile JSON stays small
   hist: Played[] = [];                 // last 20 listens with their signal and time (the session is a suffix of this)
   // LinUCB state: A^-1 (d x d, row-major) and b = lambda*theta0 + sum(reward * x)
   private ainv = new Float64Array(0);
@@ -287,9 +290,24 @@ export class Profile {
 
   score(t: Track): number { return this.meanScore(t); }
 
+  /** Rebuild `played` from stored events: rows of [trackId, unix seconds]. */
+  hydratePlayed(rows: { track_id: number; at: number }[]) { for (const r of rows) this.played.set(r.track_id, r.at * 1000); }
+
+  /** True if this track was already played within the cooldown (the listener has "heard it today"). */
+  heardRecently(id: number, now: number = Date.now()) { const at = this.played.get(id); return at !== undefined && now - at < cfg.cooldownMs; }
+
   /** Feed back one listen. Learns attributes (not just the single track) and the short-term mood. */
   record(t: Track, action: "spin" | "complete", listenedMs: number, now: number = Date.now()) {
     const raw = signal(action, listenedMs, t.durationMs);
+    // A repeat inside the cooldown that gets spun means "I already heard this", not "I dislike this" (owner: "I like it but
+    // skipped it because it played a few hours ago"). It says nothing about taste, so nothing is learned from it.
+    const repeat = this.heardRecently(t.id, now);
+    this.played.set(t.id, now);
+    if (repeat && raw < 0) {
+      this.recent.push(t);
+      if (this.recent.length > 30) this.recent.shift();
+      return 0;
+    }
     // Baseline subtraction: judge this listen against what THIS user usually does. outcome 0 = early skip ... 1 = finished.
     // A habitual spinner (baseline ~0.15) skipping is expected (small negative) while finishing is a strong positive;
     // a user who rarely spins is the opposite. Signals average to ~0 per user, so negatives cannot pile up on every tag.
@@ -374,7 +392,8 @@ export function pickNext(catalog: Track[], p: Profile, rng: Rng = Math.random, n
     const stays = cfg.stay && (latest.get(t.artistId) ?? -1) > 0.2 && (count.get(t.artistId) ?? 0) < 3;
     if (!stays) lastArtists.add(t.artistId);
   }
-  const pool = catalog.filter((t) => !lastIds.has(t.id) && !lastArtists.has(t.artistId));
+  let pool = catalog.filter((t) => !lastIds.has(t.id) && !lastArtists.has(t.artistId) && !p.heardRecently(t.id, now));
+  if (pool.length < 50) pool = catalog.filter((t) => !lastIds.has(t.id) && !lastArtists.has(t.artistId)); // tiny catalog: cooldown yields
   const heard = new Map<number, number>();
   for (const t of p.recent) heard.set(t.artistId, (heard.get(t.artistId) ?? 0) + 1);
 

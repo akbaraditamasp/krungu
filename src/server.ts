@@ -41,6 +41,8 @@ function loadProfile(id: string): Profile | null {
   const row = db.query("SELECT profile FROM users WHERE id = ?").get(id) as { profile: string } | null;
   if (!row) return null;
   const p = Profile.fromJSON(JSON.parse(row.profile), byId);
+  // what this user already heard recently (for the cooldown); a fresh profile has no events yet
+  p.hydratePlayed(db.query("SELECT track_id, MAX(created_at) at FROM events WHERE user_id = ? AND created_at > ? GROUP BY track_id").all(id, now() - 7 * 86400) as { track_id: number; at: number }[]);
   cache.set(id, p);
   return p;
 }

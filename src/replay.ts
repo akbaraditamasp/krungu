@@ -49,14 +49,15 @@ for (const u of users) {
   const evs = (db.query("SELECT track_id, action, listened_ms, created_at FROM events WHERE user_id = ? ORDER BY id").all(u.id) as Ev[]).filter((e) => byId.has(e.track_id));
   const prior = JSON.parse(u.profile).prior as [string, number][];
   const done = evs.filter((e) => e.action === "complete").length;
-  console.log(`\nuser ${u.id.slice(0, 8)}: ${evs.length} plays, ${done} finished (${Math.round((100 * done) / evs.length)}%); scoring plays 11..${evs.length}`);
+  console.log(`\nuser ${u.id.slice(0, 8)}: ${evs.length} plays, ${done} finished (${Math.round((100 * done) / evs.length)}%); scoring plays 11..${evs.length} (repeats within the cooldown are not scored)`);
   for (const [name, v] of Object.entries(VARIANTS)) {
     Object.assign(cfg, base, v.cfg ?? {});
     const p = Profile.fromPrior(prior);
     const scores: number[] = [], labels: boolean[] = [];
     evs.forEach((e, i) => {
       const t = byId.get(e.track_id)!, at = e.created_at * 1000;
-      if (i >= 10) { scores.push(v.score ? v.score(t) : p.meanScore(t, p.session(at))); labels.push(e.action === "complete"); }
+      // a repeat inside the cooldown is a "heard it already" spin, not a taste signal: do not score it
+      if (i >= 10 && !p.heardRecently(t.id, at)) { scores.push(v.score ? v.score(t) : p.meanScore(t, p.session(at))); labels.push(e.action === "complete"); }
       p.record(t, e.action as "spin" | "complete", e.listened_ms, at);
     });
     if (!labels.some(Boolean) || labels.every(Boolean)) { console.log(`  ${name}: needs both finished and spun plays`); continue; }
