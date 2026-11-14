@@ -31,6 +31,8 @@ for (const [col, ddl] of [
   ["country", "TEXT"],                          // ISO code from MusicBrainz (e.g. ID)
   ["mbid", "TEXT"],
   ["country_checked", "INTEGER"],               // unix time of the last MusicBrainz lookup
+  ["explored_at", "INTEGER"],                   // unix time related artists were last expanded (src/explore.ts)
+  ["albums_checked", "INTEGER"],                // unix time of the last album/new-release scan (src/refresh.ts)
 ] as const) {
   if (!cols.includes(col)) db.run(`ALTER TABLE artists ADD COLUMN ${col} ${ddl}`);
 }
@@ -91,6 +93,20 @@ CREATE TABLE IF NOT EXISTS events (
   dow INTEGER,                     -- day of week 0-6
   created_at INTEGER NOT NULL
 );
+-- One row per track the engine served: the exact probability it had of picking it (propensity, for off-policy evaluation:
+-- IPS / doubly robust) and the ranking components at that moment (what src/fit.ts regresses on). Join to events by
+-- (user_id, track_id) = the first event after served_at.
+CREATE TABLE IF NOT EXISTS serves (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  track_id INTEGER NOT NULL,
+  mode TEXT,
+  propensity REAL NOT NULL,
+  policy TEXT NOT NULL,            -- 'legacy' | 'learned'
+  comps TEXT NOT NULL,             -- JSON of the ranking components
+  served_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS serves_user ON serves(user_id, served_at);
 CREATE INDEX IF NOT EXISTS events_user ON events(user_id, created_at);
 CREATE INDEX IF NOT EXISTS events_track ON events(track_id);
 `);

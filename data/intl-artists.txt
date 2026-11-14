@@ -1,0 +1,101 @@
+# International artists (one per line). Rerun: bun run seed:intl
+# Pop
+Taylor Swift
+Ed Sheeran
+Bruno Mars
+Adele
+Justin Bieber
+Ariana Grande
+Dua Lipa
+The Weeknd
+Billie Eilish
+Olivia Rodrigo
+Sabrina Carpenter
+Shawn Mendes
+Charlie Puth
+Selena Gomez
+Harry Styles
+Lady Gaga
+Rihanna
+Katy Perry
+Maroon 5
+One Direction
+Sam Smith
+Lewis Capaldi
+Coldplay
+Imagine Dragons
+OneRepublic
+Troye Sivan
+# Rock / alternative
+Linkin Park
+Green Day
+Avril Lavigne
+Paramore
+Nirvana
+Guns N' Roses
+Bon Jovi
+Queen
+The Beatles
+Oasis
+Arctic Monkeys
+Radiohead
+Foo Fighters
+Muse
+My Chemical Romance
+Fall Out Boy
+Panic! At The Disco
+Twenty One Pilots
+Red Hot Chili Peppers
+Metallica
+AC/DC
+Scorpions
+Westlife
+Backstreet Boys
+Boyzone
+# Hip hop / R&B
+Drake
+Kendrick Lamar
+Eminem
+Travis Scott
+Post Malone
+Doja Cat
+SZA
+Bruno Mars
+Usher
+Chris Brown
+Beyonce
+Alicia Keys
+John Legend
+# Dance / electro
+Calvin Harris
+David Guetta
+Martin Garrix
+Alan Walker
+Marshmello
+The Chainsmokers
+Avicii
+Kygo
+# K-pop / Asia
+BTS
+BLACKPINK
+NewJeans
+TWICE
+Stray Kids
+IU
+Jay Chou
+Joji
+Rich Brian
+Official HIGE DANdism
+YOASOBI
+# Latin / lainnya
+Shakira
+Bad Bunny
+Luis Fonsi
+Justin Timberlake
+Michael Jackson
+Whitney Houston
+Mariah Carey
+Celine Dion
+Bob Marley
+Jason Mraz
+Norah Jones

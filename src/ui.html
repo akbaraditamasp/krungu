@@ -50,6 +50,9 @@
   .chip:active { transform:translate(2px,2px); box-shadow:0 0 0 var(--ink); }
   .chip.on { background:var(--teal); color:var(--paper); transform:translate(2px,2px); box-shadow:0 0 0 var(--ink); }
   .chip.on::before { content:"✓ "; }
+  #q { width:100%; box-sizing:border-box; font:700 14px/1 var(--mono); color:var(--ink); background:#FFF8E8; border:var(--line); border-radius:12px; padding:13px 14px; margin-bottom:12px; }
+  #picked:empty::before { content:"belum ada"; color:var(--mute); font:12px var(--mono); }
+  .chip small { font-weight:400; opacity:.75; }
   .cta { position:sticky; bottom:0; margin-top:auto; padding:22px 0 0;
          background:linear-gradient(to top, var(--paper) 70%, transparent); }
   button.primary { width:100%; min-height:56px; font:400 22px/1 var(--display); letter-spacing:.5px; color:var(--ink); background:var(--orange);
@@ -109,9 +112,11 @@
   <section id="onboarding" class="hidden">
     <h1 class="logo">Krungu</h1>
     <div class="stripes"></div>
-    <p class="sub">Pilih beberapa genre dan artis. Setelah itu tinggal dengarkan.</p>
-    <h2>Genre</h2><div class="chips" id="genres"></div>
-    <h2>Artis</h2><div class="chips" id="artists"></div>
+    <p class="sub">Pilih <span id="need">5</span> lagu yang lagi kamu suka. Setelah itu tinggal dengarkan.</p>
+    <h2>Pilihanmu <span id="count">0/5</span></h2><div class="chips" id="picked"></div>
+    <h2>Cari lagu</h2>
+    <input id="q" type="search" placeholder="judul atau artis" autocomplete="off">
+    <div class="chips" id="results"></div>
     <div class="cta"><button class="primary" id="start" disabled>Mulai</button></div>
   </section>
 
@@ -178,26 +183,47 @@ async function showOnboarding() {
   $("player").classList.add("hidden");
   $("onboarding").classList.remove("hidden");
   const o = await api("/onboarding");
-  const picked = { genres: new Set(), artists: new Set() };
-  const render = (box, items, set, label) => {
-    box.innerHTML = "";
-    for (const it of items) {
-      const key = it.id ?? it;
-      const b = document.createElement("button");
-      b.className = "chip"; b.textContent = label(it);
-      b.onclick = () => { set.has(key) ? set.delete(key) : set.add(key); b.classList.toggle("on"); $("start").disabled = !(picked.genres.size + picked.artists.size); };
-      box.appendChild(b);
-    }
+  const need = o.picks;
+  $("need").textContent = need;
+  const picked = new Map(); // song id -> song
+  let shown = o.songs;
+  const chip = (song, on, toggle) => {
+    const b = document.createElement("button");
+    b.className = "chip" + (on ? " on" : "");
+    b.innerHTML = "";
+    b.append(song.title + " ");
+    const sm = document.createElement("small"); sm.textContent = "· " + song.artist; b.append(sm);
+    b.onclick = toggle;
+    return b;
   };
-  render($("genres"), o.genres, picked.genres, (g) => g);
-  render($("artists"), o.artists, picked.artists, (a) => a.name);
+  const draw = () => {
+    $("count").textContent = `${picked.size}/${need}`;
+    $("start").disabled = picked.size < need;
+    const pk = $("picked"); pk.innerHTML = "";
+    for (const s of picked.values()) pk.appendChild(chip(s, true, () => { picked.delete(s.id); draw(); }));
+    const rs = $("results"); rs.innerHTML = "";
+    for (const s of shown) rs.appendChild(chip(s, picked.has(s.id), () => {
+      if (picked.has(s.id)) picked.delete(s.id); else if (picked.size < need) picked.set(s.id, s);
+      draw();
+    }));
+  };
+  let timer = 0, seq = 0;
+  $("q").oninput = () => {
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      const q = $("q").value.trim(), my = ++seq;
+      const songs = q ? (await api("/onboarding/search?q=" + encodeURIComponent(q)).catch(() => ({ songs: [] }))).songs : o.songs;
+      if (my === seq) { shown = songs; draw(); }
+    }, 250);
+  };
   $("start").onclick = async () => {
     $("start").disabled = true;
     const r = await api("/users", { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ genres: [...picked.genres], artistIds: [...picked.artists] }) });
+      body: JSON.stringify({ trackIds: [...picked.keys()] }) });
     userId = r.userId; saveUser(userId);
     showPlayer(true);
   };
+  draw();
 }
 
 // ---------- fetching the next track (pick + resolve audio + buffer) ----------

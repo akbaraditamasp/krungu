@@ -208,3 +208,114 @@ Ayu Ting Ting
 Cita Citata
 Trio Macan
 Ratih Purwasih
+# Ditambah: hip-hop/pop baru, dangdut/koplo/hip dut (rerun seed:id, lalu refresh --full)
+Three Sixty
+Denny Caknan
+Guyon Waton
+Happy Asmara
+Difarina Indra
+Lala Widy
+Shinta Arsinta
+Anggun C. Sasmi
+Fery Maulana
+NDX A.K.A
+Tri Suaka
+Nabila Maharani
+Ndarboy Genk
+Yeni Inka
+Esa Risty
+Arya Galih
+Gerry Mahesa
+Dory Harsa
+Cak Percil
+Cak Sodiq
+Woro Widowati
+Putri Isnari
+Sasya Arkhisna
+Vita Alvia
+Jihan Audy
+Via Vallen
+Nella Kharisma
+Nia Daniaty
+Elvy Sukaesih
+Rhoma Irama
+Wawa Marisa
+Mansyur S
+Jaran Goyang
+Ratu Idola
+Salshabilla Adriani
+Tiara Andini
+Ziva Magnolya
+Lyodra
+Isyana Sarasvati
+Mahalini
+Juicy Luicy
+Pamungkas
+Hindia
+Nadin Amizah
+Bernadya
+Tenxi
+Naykilla
+Sal Priadi
+Fourtwnty
+Reality Club
+The Lantis
+Kunto Aji
+Rizky Febian
+Aziz Harun
+Yovie Widianto
+Jason Ranti
+Feast
+Rukun Raharja
+Lomba Sihir
+Majelis Lucu
+.Feast
+Bahar
+Sheila Majid
+Skinnyfabs
+Kiki Saputri
+Ghea Indrawari
+Mawar de Jongh
+Aziz Hedra
+Idgitaf
+Hanin Dhiya
+Anneth
+Jaz
+Rossa
+Ayu Ting Ting
+Rafly
+Tri Suaka Official
+Adiba Khanza
+Syahiba Saufa
+# Hipdut (dari tag Last.fm "hipdut" + playlist Deezer "Hipdut"; cek & tambah sendiri kalau ada yang kurang)
+Tenxi
+Naykilla
+dia
+Naufal Syachreza
+MikkyZia
+Akbar Chalay
+Putri Tanjung
+Raven
+Nok Yeka
+Rombongan Bodonk Koplo
+DJ Likin Breat
+# Dangdut koplo (dari tag Last.fm "dangdut koplo")
+Siti Badriah
+Trio Macan
+Banditoz Yaow 86
+BoyCord
+Iva Lola
+Ratna Antika
+Lilis Karlina
+Sinta and Jojo
+Rani Chania
+Julia Perrez
+Lilin Herlina
+Della Monica
+Dessy K
+Essa Brillian
+Yulia Citra
+Uut Selly
+Amoy Rainita
+Selvi Kitty
+Inul Daratista

@@ -2,7 +2,7 @@
 // and receives what happened. Deliberately no search/browse endpoint; /onboarding is the only catalog listing.
 // Run: bun run serve   (PORT=3000, HOST=127.0.0.1 by default)
 import { db } from "./db.ts";
-import { loadCatalog, pickNext, Profile, type Track } from "./radio.ts";
+import { learnedWeights, loadCatalog, pickNext, Profile, type Track } from "./radio.ts";
 import { forgetUrl, matchTrack, streamUrl } from "./youtube.ts";
 
 const catalog = loadCatalog();
@@ -25,13 +25,27 @@ for (const a of byArtist.values()) for (const k of a.feats.keys()) if (k.startsW
   const g = k.slice(4);
   if (GENRES.includes(g)) genreCount.set(g, (genreCount.get(g) ?? 0) + 1);
 }
+const bestTrack = new Map<number, Track>(); // most familiar track per artist (the one shown as a suggestion)
+for (const t of catalog) { const b = bestTrack.get(t.artistId); if (!b || t.fam > b.fam) bestTrack.set(t.artistId, t); }
+const songView = (t: Track) => ({ id: t.id, artist: t.artist, title: t.title });
 const onboarding = {
-  genres: GENRES.filter((g) => (genreCount.get(g) ?? 0) >= 4),
+  genres: GENRES.filter((g) => (genreCount.get(g) ?? 0) >= 4), // legacy (POST /users still accepts genres/artistIds)
   artists: (db.query(
     `SELECT id, name, local_seed ls FROM artists WHERE id IN (${[...byArtist.keys()].join(",") || "0"})
      ORDER BY local_seed DESC, fans DESC NULLS LAST LIMIT 80`,
   ).all() as { id: number; name: string; ls: number }[]).map((a) => ({ id: a.id, name: a.name })),
 };
+// Onboarding is picking SONGS: a few suggestions (famous songs of the top artists) plus a search that exists only for this step.
+const suggestions = onboarding.artists.slice(0, 40).map((a) => bestTrack.get(a.id)).filter((t): t is Track => !!t).map(songView);
+const norm = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+const haystack = catalog.map((t) => ({ t, h: norm(`${t.artist} ${t.title}`) }));
+function searchSongs(q: string, limit = 20) {
+  const words = norm(q).split(" ").filter(Boolean);
+  if (!words.length) return [];
+  return haystack.filter((x) => words.every((w) => x.h.includes(w)) && !blocked.has(x.t.id))
+    .sort((a, b) => b.t.fam - a.t.fam).slice(0, limit).map((x) => songView(x.t));
+}
+const PICKS = 5; // songs asked at onboarding
 
 // ---------- profiles ----------
 const cache = new Map<string, Profile>();
@@ -56,7 +70,7 @@ const trackView = (t: Track, mode: string) => ({
 
 Bun.serve({
   hostname: process.env.HOST ?? "127.0.0.1",
-  port: Number(process.env.PORT ?? 3000),
+  port: Number(process.env.PORT ?? 4020),
   async fetch(req) {
     const url = new URL(req.url);
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
@@ -110,13 +124,15 @@ Bun.serve({
     }
 
     if (req.method === "GET" && path === "/health") return json({ ok: true, tracks: catalog.length });
-    if (req.method === "GET" && path === "/onboarding") return json(onboarding);
+    if (req.method === "GET" && path === "/onboarding") return json({ ...onboarding, picks: PICKS, songs: suggestions });
+    if (req.method === "GET" && path === "/onboarding/search") return json({ songs: searchSongs(url.searchParams.get("q") ?? "") });
 
     if (req.method === "POST" && path === "/users") {
-      const body = (await req.json().catch(() => ({}))) as { genres?: string[]; artistIds?: number[] };
-      const picks = (body.artistIds ?? []).map((id) => byArtist.get(id)).filter((t): t is Track => !!t);
+      const body = (await req.json().catch(() => ({}))) as { genres?: string[]; artistIds?: number[]; trackIds?: number[] };
+      const songs = [...new Set(body.trackIds ?? [])].slice(0, PICKS).map((id) => byId.get(id)).filter((t): t is Track => !!t);
+      const picks = [...songs, ...(body.artistIds ?? []).map((id) => byArtist.get(id)).filter((t): t is Track => !!t)];
       const genres = (body.genres ?? []).filter((g) => GENRES.includes(g));
-      if (!picks.length && !genres.length) return json({ error: "pick at least one genre or artist" }, 400);
+      if (!picks.length && !genres.length) return json({ error: "pick at least one song" }, 400);
       const p = new Profile();
       p.seed(picks, genres);
       const id = crypto.randomUUID();
@@ -133,6 +149,8 @@ Bun.serve({
 
     if (req.method === "GET" && action === "next") {
       const pick = pickNext(blocked.size ? catalog.filter((t) => !blocked.has(t.id)) : catalog, profile);
+      db.run("INSERT INTO serves (user_id, track_id, mode, propensity, policy, comps, served_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        [userId, pick.track.id, pick.mode, pick.prop, learnedWeights ? "learned" : "legacy", JSON.stringify(pick.comps), now()]);
       return json(trackView(pick.track, pick.mode));
     }
 
@@ -166,4 +184,4 @@ Bun.serve({
     return json({ error: "method not allowed" }, 405);
   },
 });
-console.log(`radio API on http://${process.env.HOST ?? "127.0.0.1"}:${process.env.PORT ?? 3000}`);
+console.log(`radio API on http://${process.env.HOST ?? "127.0.0.1"}:${process.env.PORT ?? 4020}`);

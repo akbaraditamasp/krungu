@@ -1,0 +1,13 @@
+# Deezer playlist search queries for fresh Indonesian music; used by src/refresh.ts (top 3 playlists per query)
+Indonesia terbaru
+Top Indonesia
+Hits Indonesia
+Pop Indonesia terbaru
+Dangdut terbaru
+Dangdut koplo
+Hip dut
+Campursari
+Indonesian hip hop
+Indie Indonesia
+Galau Indonesia
+Lagu viral Indonesia

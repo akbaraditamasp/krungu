@@ -9,6 +9,10 @@
     "seed:id": "bun run src/seed-id.ts",
     "country": "bun run src/country.ts",
     "seed:related": "bun run src/seed-related.ts",
+    "seed:intl": "bun run src/seed-intl.ts",
+    "refresh": "bun run src/refresh.ts",
+    "explore": "bun run src/explore.ts",
+    "daily": "bun run src/daily.ts",
     "years": "bun run src/years.ts",
     "audio": "bun run src/audio-feats.ts",
     "clean": "bun run src/clean.ts",
@@ -17,6 +21,11 @@
     "sim": "bun run src/sim.ts",
     "sim:moody": "bun run src/sim-moody.ts",
     "replay": "bun run src/replay.ts",
+    "fit": "bun run src/fit.ts",
+    "embed": "bun run src/embed.ts all",
+    "lyrics": "bun run src/lyrics.ts all",
+    "lyrics:test": "bun run src/lyrics.ts test",
+    "embed:test": "bun run src/embed.ts test",
     "trace": "bun run src/trace.ts",
     "export": "bun run src/export.ts",
     "serve": "bun run src/server.ts"
@@ -28,6 +37,8 @@
     "typescript": "^7"
   },
   "dependencies": {
+    "@huggingface/transformers": "^4.3.2",
+    "mpg123-decoder": "^1.0.3",
     "youtubei.js": "^18.3.0"
   }
 }

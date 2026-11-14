@@ -14,6 +14,7 @@ const VARIANTS: Record<string, Partial<typeof cfg>> = {
   "all on (default)": {},
   "all on, long-term weight 0.5": { ltW: 0.5 },
   "all on, session weight 0.5": { sessW: 0.5 },
+  "all on, no anchor (previous default)": { anchorW: 0, anchorAlpha: 1 },
   "all on, negatives x0.3": { sessNeg: 0.3 },
   "all on, negatives x0 (finishes only)": { sessNeg: 0 },
   "all on, weight 0.75, negatives x0.3": { sessW: 0.75, sessNeg: 0.3 },

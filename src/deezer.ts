@@ -38,3 +38,18 @@ export const artist = (id: number) => get<DzArtist>(`/artist/${id}`);
 export const track = (id: number) => get<{ id: number; release_date?: string; isrc?: string; bpm?: number; gain?: number }>(`/track/${id}`);
 export const searchArtist = (q: string) =>
   get<{ data: DzArtist[] }>(`/search/artist?q=${encodeURIComponent(q)}&limit=5`).then((r) => r.data);
+
+export type DzAlbum = { id: number; title: string; release_date?: string; record_type?: string };
+export type DzAlbumTrack = DzTrack & { release_date?: string };
+export const genres = () => get<{ data: { id: number; name: string }[] }>(`/genre`).then((r) => r.data);
+export const genreChartTracks = (genre: number, limit = 100) =>
+  get<{ data: DzTrack[] }>(`/chart/${genre}/tracks?limit=${limit}`).then((r) => r.data);
+export const genreChartArtists = (genre: number, limit = 50) =>
+  get<{ data: DzArtist[] }>(`/chart/${genre}/artists?limit=${limit}`).then((r) => r.data);
+/** All albums/singles/EPs of an artist (Deezer returns newest-first only by id, so sort by release_date yourself). */
+export const artistAlbums = (id: number, limit = 100) =>
+  get<{ data: DzAlbum[] }>(`/artist/${id}/albums?limit=${limit}`).then((r) => r.data);
+export const albumTracks = (id: number) =>
+  get<{ data: DzTrack[] }>(`/album/${id}/tracks?limit=100`).then((r) => r.data);
+export const searchPlaylists = (q: string, limit = 5) =>
+  get<{ data: { id: number; title: string; nb_tracks: number }[] }>(`/search/playlist?q=${encodeURIComponent(q)}&limit=${limit}`).then((r) => r.data);

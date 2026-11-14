@@ -18,6 +18,7 @@
 //  - NOT derived from theory (tuned in src/sim.ts): the reward mapping in signal()/record(), LAMBDA, ALPHA, ERA_W, FAM_W,
 //    the session weights (SESS_W, gamma, artist bonus), the mood-EMA term, the artist bias, the softmax temperature, the
 //    artist-variety rules and the probing threshold.
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { db } from "./db.ts";
 
 export type Track = {
@@ -42,7 +43,13 @@ export const cfg = {
   stay: num("STAY", 1) === 1,     // an artist whose last play was finished may come back before the 8-play block ends
   probe: num("PROBE", 1) === 1,   // diversify picks at session start / after a run of negatives
   divW: num("DIV_W", 0.5),        // diversity penalty strength while probing
-  gapMs: 30 * 60_000,             // silence longer than this starts a new session
+  anchorW: num("ANCHOR_W", 1),    // mood anchor: pull toward the last few FINISHED songs of the session (0 = off); spins never age it
+  anchorGamma: num("ANCHOR_GAMMA", 0.8), // weight of each older finished song (per finished song, not per listen)
+  anchorFade: num("ANCHOR_FADE", 0.97),  // slow fade per listen since the finish (a run of 9 spins keeps ~76%)
+  hood: num("HOOD", 60),          // while a finished song exists in the session, only its `hood` nearest neighbours are candidates (0 = off)
+  anchorMax: 3,                  // finished songs that form the anchor
+  anchorAlpha: num("ANCHOR_ALPHA", 0.3), // exploration (UCB bonus) is scaled down to this fraction while the anchor is fresh
+  gapMs: 30 * 60_000,            // silence longer than this starts a new session
   cooldownMs: num("COOLDOWN_H", 24) * 3_600_000, // a track played within this time is not served again; spinning such a repeat means "heard it already", not "dislike"
 };
 
@@ -113,11 +120,18 @@ export function loadCatalog(): Track[] {
     if (k.startsWith("tag:")) tagWeight.set(k, (tagWeight.get(k) ?? 0) + v);
     else moods.add(k);
   }
-  VOCAB = [
+  const computed = [
     ...[...tagWeight].sort((a, b) => b[1] - a[1]).slice(0, TOP_TAGS).map(([k]) => k),
     ...[...moods].sort(), ...(process.env.NO_ERA ? [] : ERA_KEYS), // NO_ERA / NO_FAM: ablation switches for src/sim.ts
     ...(process.env.NO_FAM ? [] : ["pop:fam"]),
   ];
+  // Pinned vocabulary: the top-100 tags shift whenever the daily job adds artists, and a profile saved under a different
+  // vocabulary silently restarts from its onboarding prior (see Profile.fromJSON). So the vocabulary is frozen in
+  // data/vocab.json; delete that file to rebuild it (this RESETS every user's learned model).
+  const pin = `${import.meta.dir}/../data/vocab.json`;
+  if (process.env.NO_ERA || process.env.NO_FAM) VOCAB = computed;
+  else if (existsSync(pin)) VOCAB = JSON.parse(readFileSync(pin, "utf8")) as string[];
+  else { VOCAB = computed; writeFileSync(pin, JSON.stringify(VOCAB)); }
   INDEX = new Map(VOCAB.map((k, i) => [k, i]));
 
   const out: Track[] = [];
@@ -275,12 +289,50 @@ export class Profile {
    */
   sessionScore(t: Track, sess: Played[]): number {
     if (!cfg.sessW || !sess.length) return 0;
+    return cfg.sessW * this.rawSession(t, sess);
+  }
+
+  /** sessionScore() without its weight: the raw feature that src/fit.ts learns a weight for. */
+  rawSession(t: Track, sess: Played[]): number {
     let s = 0;
     for (let k = 0; k < sess.length; k++) {
       const h = sess[sess.length - 1 - k]!; // k = 0 is the latest listen
       s += Math.pow(cfg.sessGamma, k) * (h.s < 0 ? h.s * cfg.sessNeg : h.s) * similarity(t, h.t);
     }
-    return cfg.sessW * s;
+    return s;
+  }
+
+  /** Anchor similarity without its weight: weighted mean and maximum similarity to the session's recent finished songs. */
+  rawAnchor(t: Track, a: ReturnType<Profile["anchor"]>): { mean: number; max: number } {
+    if (!a.total) return { mean: 0, max: 0 };
+    let s = 0, max = 0;
+    for (const [h, w] of a.w) { const sim = similarity(t, h.t); s += w * sim; if (sim > max) max = sim; }
+    return { mean: s / a.total, max };
+  }
+
+  /**
+   * Mood anchor: the session's last few finished songs. Unlike sessionScore() their weight decays per FINISHED song and only
+   * slowly per listen, so a run of spins (the radio missing the mood) does not make the radio forget the mood that worked,
+   * and does not push it into random picks. Returns the similarity pull (weighted mean similarity, 0..1) and its freshness.
+   */
+  anchor(sess: Played[]): { w: Map<Played, number>; strength: number; total: number } {
+    const w = new Map<Played, number>();
+    let total = 0, strength = 0, j = 0;
+    for (let k = sess.length - 1; k >= 0 && j < cfg.anchorMax; k--) {
+      const h = sess[k]!;
+      if (h.s <= 0.2) continue;
+      const fade = Math.pow(cfg.anchorFade, sess.length - 1 - k);
+      const g = Math.pow(cfg.anchorGamma, j);
+      w.set(h, g * fade); total += g;
+      if (j === 0) strength = fade;
+      j++;
+    }
+    return { w, strength, total };
+  }
+
+  anchorScore(t: Track, a: ReturnType<Profile["anchor"]>): number {
+    if (!cfg.anchorW || !a.total) return 0;
+    return cfg.anchorW * this.rawAnchor(t, a).mean;
   }
 
   /** Everything except the uncertainty bonus: long-term mean + session + mood EMA + artist bias. */
@@ -377,16 +429,58 @@ const clamp = (x: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, x
 
 // ---------- next track ----------
 
-export type Pick = { track: Track; mode: "exploit" | "explore" };
+// ---------- learned ranking (see src/fit.ts) ----------
+
+/**
+ * The raw ingredients of the ranking score for one candidate. Every weight that used to be hand-tuned (LT_W, ALPHA, SESS_W,
+ * ANCHOR_W, DIV_W, artist bias, variety penalty) is the coefficient of one of these in a logistic regression of "was the song
+ * finished", fitted by src/fit.ts on the real `events` log. data/weights.json present = the engine ranks by those coefficients.
+ */
+export const COMP_KEYS = ["mean", "sd", "sess", "anc", "ancMax", "mood", "art", "heard", "div"] as const;
+export type Comp = Record<(typeof COMP_KEYS)[number], number>;
+export type Ctx = { sess: Played[]; anc: ReturnType<Profile["anchor"]>; heard: Map<number, number>; last4: Track[] };
+
+export function makeCtx(p: Profile, now: number): Ctx {
+  const sess = p.session(now);
+  const heard = new Map<number, number>();
+  for (const t of p.recent) heard.set(t.artistId, (heard.get(t.artistId) ?? 0) + 1);
+  return { sess, anc: p.anchor(sess), heard, last4: p.recent.slice(-4) };
+}
+
+export function components(p: Profile, t: Track, c: Ctx): Comp {
+  const e = p.estimate(t), a = p.rawAnchor(t, c.anc);
+  let div = 0;
+  for (const l of c.last4) div = Math.max(div, similarity(t, l));
+  return {
+    mean: e.mean, sd: e.sd, sess: p.rawSession(t, c.sess), anc: a.mean, ancMax: a.max,
+    mood: p.moodFit(t) / 0.5, art: p.artist.get(t.artistId) ?? 0, heard: c.heard.get(t.artistId) ?? 0, div,
+  };
+}
+
+export type Weights = Comp & { intercept?: number };
+function loadWeights(): Weights | null {
+  try {
+    const f = `${import.meta.dir}/../data/weights.json`;
+    if (process.env.NO_LEARNED || !existsSync(f)) return null;
+    return JSON.parse(readFileSync(f, "utf8")).weights as Weights;
+  } catch { return null; }
+}
+export const learnedWeights = loadWeights();
+
+export type Pick = { track: Track; mode: "exploit" | "explore"; prop: number; comps: Comp };
 
 export function pickNext(catalog: Track[], p: Profile, rng: Rng = Math.random, now: number = Date.now()): Pick {
-  const lastIds = new Set(p.recent.map((t) => t.id));
+  if (learnedWeights) return pickLearned(catalog, p, rng, now, learnedWeights);
+  return pickLegacy(catalog, p, rng, now);
+}
 
-  // Medium artist variety: the same artist is not repeated within 8 plays, and artists heard a lot recently are nudged down.
-  // "Stay": an artist whose latest play in that window was finished (and who has been played < 3 times in it) is exempt,
-  // because after a hit the right move is more of the same mood, not an artist the listener just rejected or never heard.
+/** Candidate pool shared by both rankers: hard rules (no recent tracks, 8-play artist block with "stay" exemption, cooldown). */
+function candidatePool(catalog: Track[], p: Profile, now: number): Track[] {
+  const lastIds = new Set(p.recent.map((t) => t.id));
+  // "Stay" uses the artist's BEST play in the window: one finished song keeps the artist available even if the next one
+  // was spun (before, the latest play decided, so a single spin of Catalyst blocked Weird Genius right after Future Ghost).
   const latest = new Map<number, number>(), count = new Map<number, number>();
-  for (const h of p.hist.slice(-8)) { latest.set(h.t.artistId, h.s); count.set(h.t.artistId, (count.get(h.t.artistId) ?? 0) + 1); }
+  for (const h of p.hist.slice(-8)) { latest.set(h.t.artistId, Math.max(latest.get(h.t.artistId) ?? -1, h.s)); count.set(h.t.artistId, (count.get(h.t.artistId) ?? 0) + 1); }
   const lastArtists = new Set<number>();
   for (const t of p.recent.slice(-8)) {
     const stays = cfg.stay && (latest.get(t.artistId) ?? -1) > 0.2 && (count.get(t.artistId) ?? 0) < 3;
@@ -394,24 +488,78 @@ export function pickNext(catalog: Track[], p: Profile, rng: Rng = Math.random, n
   }
   let pool = catalog.filter((t) => !lastIds.has(t.id) && !lastArtists.has(t.artistId) && !p.heardRecently(t.id, now));
   if (pool.length < 50) pool = catalog.filter((t) => !lastIds.has(t.id) && !lastArtists.has(t.artistId)); // tiny catalog: cooldown yields
+  return pool;
+}
+
+/** Sample from the top K by weights exp((rank - best) / temp); returns the index and its exact selection probability (logged for off-policy evaluation). */
+function sample(ranks: number[], temp: number, rng: Rng): { i: number; prop: number } {
+  const w = ranks.map((x) => Math.exp((x - ranks[0]!) / temp));
+  const sum = w.reduce((a, b) => a + b, 0);
+  let r = rng() * sum, i = 0;
+  for (let k = 0; k < w.length; k++) { r -= w[k]!; if (r <= 0) { i = k; break; } }
+  return { i, prop: w[i]! / sum };
+}
+
+/**
+ * Ranking by fitted coefficients: rank = sum_k w_k * component_k is the log-odds that the song is finished, so there is no
+ * ALPHA / probing switch / temperature to guess. The pick is sampled with probability proportional to the odds (temp 1) among
+ * the 40 best, which is probability matching.
+ */
+function pickLearned(catalog: Track[], p: Profile, rng: Rng, now: number, w: Weights): Pick {
+  const pool = candidatePool(catalog, p, now), ctx = makeCtx(p, now);
+  const cand = pool.map((t) => {
+    const c = components(p, t, ctx);
+    let rank = 0, mean = 0;
+    for (const k of COMP_KEYS) { const v = w[k] * c[k]; rank += v; if (k !== "sd") mean += v; }
+    return { t, c, rank, mean };
+  });
+  cand.sort((a, b) => b.rank - a.rank);
+  const top = cand.slice(0, 40);
+  const meanCut = [...cand].sort((a, b) => b.mean - a.mean)[Math.min(9, cand.length - 1)]?.mean ?? -Infinity;
+  const { i, prop } = sample(top.map((x) => x.rank), 1, rng);
+  const ch = top[i]!;
+  return { track: ch.t, mode: ch.mean >= meanCut ? "exploit" : "explore", prop, comps: ch.c };
+}
+
+function pickLegacy(catalog: Track[], p: Profile, rng: Rng, now: number): Pick {
+  const lastIds = new Set(p.recent.map((t) => t.id));
+
+  // Medium artist variety: the same artist is not repeated within 8 plays, and artists heard a lot recently are nudged down.
+  // "Stay": an artist whose latest play in that window was finished (and who has been played < 3 times in it) is exempt,
+  // because after a hit the right move is more of the same mood, not an artist the listener just rejected or never heard.
+  const pool = candidatePool(catalog, p, now);
   const heard = new Map<number, number>();
   for (const t of p.recent) heard.set(t.artistId, (heard.get(t.artistId) ?? 0) + 1);
 
   // Probing: when we do not know the current mood (new session) or the last picks keep failing, spread the next picks over
   // different styles (MMR-style penalty against the last few served tracks) so the mood is found in few spins.
   const sess = p.session(now);
-  const probing = cfg.probe && (sess.length < 3 || p.spinStreak >= 3);
+  const anc = cfg.anchorW ? p.anchor(sess) : { w: new Map(), strength: 0, total: 0 };
+  // With a fresh anchor we do know the mood: no diversification and little exploration, even through a run of spins.
+  const anchored = anc.strength > 0.5;
+  const probing = cfg.probe && !anchored && (sess.length < 3 || p.spinStreak >= 3);
   const lastServed = p.recent.slice(-4);
+
+  // Neighbourhood of the last good song (owner: "after a good song the next one is off; I spin and it drifts further away").
+  // src/fit.ts shows the strongest predictor of finishing is the MAXIMUM similarity to a song finished in this session (the
+  // mean over the anchor songs has no weight), so while a finished song exists in the session only its `hood` nearest
+  // neighbours are candidates. A spin therefore re-centres on the good song instead of walking away from the failed one;
+  // there is no exploration bonus inside the neighbourhood (fit.ts: the uncertainty term does not help finishing).
+  let cands = pool;
+  if (cfg.hood > 0 && anc.total > 0) {
+    cands = pool.map((t) => ({ t, m: p.rawAnchor(t, anc).max })).sort((a, b) => b.m - a.m).slice(0, cfg.hood).map((x) => x.t);
+  }
+  const alpha = cands !== pool ? 0 : ALPHA * (1 - (1 - cfg.anchorAlpha) * anc.strength);
 
   // LinUCB: rank by expected reward + ALPHA * uncertainty. Exploration therefore targets what the model is unsure about
   // (new eras/genres), not random tracks, and fades on its own as those directions get data.
-  const cand = pool.map((t) => {
+  const cand = cands.map((t) => {
     const e = p.estimate(t);
     const lt = cfg.ltW * e.mean;
-    const extra = p.sessionScore(t, sess) + p.moodFit(t) + 0.5 * (p.artist.get(t.artistId) ?? 0) - 0.15 * (heard.get(t.artistId) ?? 0);
+    const extra = p.sessionScore(t, sess) + p.anchorScore(t, anc) + p.moodFit(t) + 0.5 * (p.artist.get(t.artistId) ?? 0) - 0.15 * (heard.get(t.artistId) ?? 0);
     let div = 0;
     if (probing) for (const l of lastServed) div = Math.max(div, similarity(t, l));
-    return { t, mean: lt + extra, rank: lt + ALPHA * e.sd + extra - cfg.divW * div };
+    return { t, mean: lt + extra, rank: lt + alpha * e.sd + extra - cfg.divW * div };
   });
   cand.sort((a, b) => b.rank - a.rank);
   const top = cand.slice(0, 40);
@@ -420,13 +568,7 @@ export function pickNext(catalog: Track[], p: Profile, rng: Rng = Math.random, n
   const meanCut = [...cand].sort((a, b) => b.mean - a.mean)[Math.min(9, cand.length - 1)]?.mean ?? -Infinity;
 
   // Sample (not argmax) from the best candidates, so it still feels like a radio, not a playlist.
-  const temp = 0.25;
-  const w = top.map((x) => Math.exp((x.rank - top[0]!.rank) / temp));
-  let r = rng() * w.reduce((a, b) => a + b, 0);
-  let chosen = top[0]!;
-  for (let i = 0; i < top.length; i++) {
-    r -= w[i]!;
-    if (r <= 0) { chosen = top[i]!; break; }
-  }
-  return { track: chosen.t, mode: chosen.mean >= meanCut ? "exploit" : "explore" };
+  const { i, prop } = sample(top.map((x) => x.rank), 0.25, rng);
+  const chosen = top[i]!;
+  return { track: chosen.t, mode: chosen.mean >= meanCut ? "exploit" : "explore", prop, comps: components(p, chosen.t, makeCtx(p, now)) };
 }
