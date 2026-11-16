@@ -250,7 +250,8 @@ function ramp(item, to, secs) {
 const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
 const pool = Array.from({ length: 3 }, () => { const el = new Audio(); el.preload = "auto"; el.playsInline = true; return { el, busy: false, src: null }; });
 function unlock() {         // call synchronously from a tap handler
-  try { const c = ctx(); if (c.state !== "running") c.resume().catch(() => {}); } catch {}
+  if (IOS) keepAlive();
+  if (!PLAIN) try { const c = ctx(); if (c.state !== "running") c.resume().catch(() => {}); } catch {}
   for (const p of pool) {
     if (p.busy || p.unlocked) continue;
     p.unlocked = true;
@@ -260,8 +261,31 @@ function unlock() {         // call synchronously from a tap handler
 }
 function takeEl() { const p = pool.find((x) => !x.busy); if (p) p.busy = true; return p ?? null; }
 function giveEl(p) { if (!p) return; p.busy = false; p.el.onended = p.el.onerror = p.el.ontimeupdate = null; try { p.el.pause(); } catch {} }
+// iOS suspends the AudioContext (and everything routed through it) when the screen locks, unless the page holds a "playback"
+// audio session. Two things keep it alive: navigator.audioSession.type = "playback" (WebKit 16.4+) and an endless silent
+// <audio> element that is always playing. If the browser has no audioSession (or the URL has ?plain) we fall back to plain
+// <audio> playback: no gain node, no crossfade, no loudness levelling, but it survives a locked screen for sure.
+const IOS = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const PLAIN = IOS && (location.search.includes("plain") || !("audioSession" in navigator));
+let keep = null;
+function keepAlive() {      // from a tap: start the silent loop once
+  try { navigator.audioSession.type = "playback"; } catch {}
+  if (keep) { if (keep.paused) keep.play().catch(() => {}); return; }
+  const n = 8000, b = new Uint8Array(44 + n), v = new DataView(b.buffer), w = (o, t) => [...t].forEach((c, i) => (b[o + i] = c.charCodeAt(0)));
+  w(0, "RIFF"); v.setUint32(4, 36 + n, true); w(8, "WAVEfmt "); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, 8000, true); v.setUint32(28, 8000, true); v.setUint16(32, 1, true); v.setUint16(34, 8, true); w(36, "data"); v.setUint32(40, n, true);
+  b.fill(128, 44); // 1 s of 8-bit silence
+  keep = new Audio(URL.createObjectURL(new Blob([b], { type: "audio/wav" })));
+  keep.loop = true; keep.playsInline = true;
+  keep.play().catch(() => { keep = null; });
+}
+document.addEventListener("visibilitychange", () => { // coming back: make sure the context and the silent loop are running
+  if (document.hidden || !IOS) return;
+  if (ac && ac.state !== "running") ac.resume().catch(() => {});
+  if (keep?.paused) keep.play().catch(() => {});
+});
 function wire(item) {       // connect the element to its gain node, once per song
-  if (item.gain || item.wired) return;
+  if (PLAIN || item.gain || item.wired) return;
   item.wired = true;
   try {
     const c = ctx();
@@ -353,7 +377,9 @@ function attach(item) {     // handlers belong to the item, so a song that is fa
     // Line up the next track early (the server is slow to resolve a song: ~6-15 s) so a spin or the song ending is instant.
     if (!prefetched && el.currentTime >= start + PREFETCH_AT) { prefetched = true; prefetch(); }
     // Both songs analysed and the next one buffered: start blending before the music ends.
-    if (!crossing && item.mix && nextReady?.mix && el.currentTime >= item.mix.end - XFADE) crossfade();
+    if (!PLAIN && !crossing && item.mix && nextReady?.mix && el.currentTime >= item.mix.end - XFADE) crossfade();
+    // plain mode has no crossfade, but it can still cut the silent tail: go to the next song as soon as the music has ended
+    if (PLAIN && item.mix && next && el.currentTime >= item.mix.end - 0.2) finish("complete");
   };
   el.onended = () => { if (item === cur) finish("complete"); };
   el.onerror = () => { if (item === cur) { setStatus("lagu gagal diputar, lanjut..."); advance(); } }; // no event: it never really played
