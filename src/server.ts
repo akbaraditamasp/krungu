@@ -4,7 +4,7 @@
 import { db } from "./db.ts";
 import { learnedWeights, loadCatalog, pickNext, Profile, type Track } from "./radio.ts";
 import { forgetUrl, matchTrack, streamUrl } from "./youtube.ts";
-import { cachedMix, ensureMix } from "./trackmix.ts";
+import { cachedMix, ensureMix, foreground } from "./trackmix.ts";
 
 const catalog = loadCatalog();
 const byId = new Map(catalog.map((t) => [t.id, t]));
@@ -81,6 +81,7 @@ Bun.serve({
       return new Response(Bun.file(`${import.meta.dir}/ui.html`), { headers: { "content-type": "text/html; charset=utf-8" } });
     }
 
+    if (/^\/tracks\/\d+\/(audio|stream)$/.test(path)) foreground();
     const au = path.match(/^\/tracks\/(\d+)\/audio$/);
     if (req.method === "GET" && au) {
       const t = byId.get(Number(au[1]));
@@ -167,6 +168,10 @@ Bun.serve({
       const pick = pickNext(blocked.size ? catalog.filter((t) => !blocked.has(t.id)) : catalog, profile);
       db.run("INSERT INTO serves (user_id, track_id, mode, propensity, policy, comps, served_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [userId, pick.track.id, pick.mode, pick.prop, learnedWeights ? "learned" : "legacy", JSON.stringify(pick.comps), now()]);
+      // The client asks for this song's audio right after: start resolving now (in parallel with the round trip) and hold
+      // back the background analysis meanwhile.
+      foreground();
+      void matchTrack(pick.track).then((mt) => mt && streamUrl(mt.videoId)).catch(() => {});
       return json(trackView(pick.track, pick.mode));
     }
 

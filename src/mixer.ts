@@ -30,13 +30,14 @@ const WINGET = `${process.env.LOCALAPPDATA ?? ""}/Microsoft/WinGet/Links`;
 export const bin = (n: string) => process.env[n.toUpperCase()] ?? Bun.which(n) ?? `${WINGET}/${n}.exe`;
 const YTDLP = process.env.YTDLP ?? `${import.meta.dir}/../.venv/${process.platform === "win32" ? "Scripts/yt-dlp.exe" : "bin/yt-dlp"}`;
 
-export async function runBoth(cmd: string[]): Promise<{ out: string; err: string }> {
-  const p = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
+/** `low` = run at the lowest CPU priority (nice 19, not on Windows) so background work never slows the foreground. */
+export async function runBoth(cmd: string[], low = false): Promise<{ out: string; err: string }> {
+  const p = Bun.spawn(low && process.platform !== "win32" ? ["nice", "-n", "19", ...cmd] : cmd, { stdout: "pipe", stderr: "pipe" });
   const [out, err] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
   if ((await p.exited) !== 0) throw new Error(`${cmd[0]} failed: ${err.trim().split(/\r?\n/).slice(-4).join("\n")}`);
   return { out, err };
 }
-export const run = async (cmd: string[]) => (await runBoth(cmd)).out;
+export const run = async (cmd: string[], low = false) => (await runBoth(cmd, low)).out;
 
 export const duration = async (file: string) =>
   Number((await run([bin("ffprobe"), "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", file])).trim());
@@ -71,11 +72,11 @@ export const f = (x: number) => x.toFixed(3);
 export const norm = (lufs: number) => `loudnorm=I=${lufs}:TP=-1.5:LRA=11`;
 
 /** Download (cached) the audio of a YouTube video as <dir>/<id>.<ext>. Personal testing only (YouTube ToS). */
-export async function fetchSong(id: number, videoId: string, dir: string): Promise<string> {
+export async function fetchSong(id: number, videoId: string, dir: string, low = false): Promise<string> {
   const base = `${dir}/${id}`;
   const exts = ["m4a", "webm", "opus", "mp3"];
   for (const ext of exts) if (existsSync(`${base}.${ext}`)) return `${base}.${ext}`;
-  await run([YTDLP, "--no-warnings", "--no-playlist", "-f", "bestaudio[ext=m4a]/bestaudio", "-o", `${base}.%(ext)s`, `https://www.youtube.com/watch?v=${videoId}`]);
+  await run([YTDLP, "--no-warnings", "--no-playlist", "-f", "bestaudio[ext=m4a]/bestaudio", "-o", `${base}.%(ext)s`, `https://www.youtube.com/watch?v=${videoId}`], low);
   for (const ext of exts) if (existsSync(`${base}.${ext}`)) return `${base}.${ext}`;
   throw new Error("yt-dlp produced no file");
 }

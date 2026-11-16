@@ -72,18 +72,40 @@ export async function matchTrack(t: TrackRef): Promise<Match | null> {
   return m;
 }
 
+// Resolved stream URLs live in memory AND in SQLite (table yt_urls), so a server restart does not throw away work that took
+// 6-10 s per song on this weak machine. A URL is valid for hours and tied to the server's IP, which does not change.
+db.run(`CREATE TABLE IF NOT EXISTS yt_urls (video_id TEXT PRIMARY KEY, url TEXT NOT NULL, exp INTEGER NOT NULL)`);
 const urls = new Map<string, { url: string; exp: number }>();
-export const forgetUrl = (videoId: string) => urls.delete(videoId);
+const resolving = new Map<string, Promise<string>>(); // one yt-dlp per video, however many requests ask for it at once
+export const forgetUrl = (videoId: string) => { urls.delete(videoId); db.run("DELETE FROM yt_urls WHERE video_id = ?", [videoId]); };
+
+// yt-dlp is heavy (seconds of CPU each): at most 2 at a time on a 2-core server (the lookups above are lighter, own limit)
+let ytActive = 0;
+const ytWaiting: (() => void)[] = [];
+async function ytLimited<T>(fn: () => Promise<T>): Promise<T> {
+  if (ytActive >= 2) await new Promise<void>((r) => ytWaiting.push(r));
+  ytActive++;
+  try { return await fn(); } finally { ytActive--; ytWaiting.shift()?.(); }
+}
 
 // yt-dlp does the stream resolution: youtubei.js's IOS client only yields URLs that stop working after ~1 MB (~64 s),
 // while yt-dlp picks clients that give full-length audio. Location: YTDLP env, else the project venv (.venv).
 const YTDLP = process.env.YTDLP ?? `${import.meta.dir}/../.venv/${process.platform === "win32" ? "Scripts/yt-dlp.exe" : "bin/yt-dlp"}`;
 
 /** Direct audio URL for a video, valid for hours and tied to this machine's IP. */
-export async function streamUrl(videoId: string): Promise<string> {
+export function streamUrl(videoId: string): Promise<string> {
+  const nowS = Date.now() / 1000;
   const hit = urls.get(videoId);
-  if (hit && hit.exp > Date.now() / 1000) return hit.url;
-  const url = await limited(async () => {
+  if (hit && hit.exp > nowS) return Promise.resolve(hit.url);
+  const row = db.query("SELECT url, exp FROM yt_urls WHERE video_id = ?").get(videoId) as { url: string; exp: number } | null;
+  if (row && row.exp > nowS) { urls.set(videoId, row); return Promise.resolve(row.url); }
+  let p = resolving.get(videoId);
+  if (!p) { p = resolveUrl(videoId).finally(() => resolving.delete(videoId)); resolving.set(videoId, p); }
+  return p;
+}
+
+async function resolveUrl(videoId: string): Promise<string> {
+  const url = await ytLimited(async () => {
     const p = Bun.spawn([YTDLP, "--no-warnings", "--no-playlist", "-f", "bestaudio[ext=m4a]/bestaudio", "-g", `https://www.youtube.com/watch?v=${videoId}`], { stdout: "pipe", stderr: "pipe" });
     const timer = setTimeout(() => p.kill(), 30_000);
     const [out, err] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
@@ -95,5 +117,6 @@ export async function streamUrl(videoId: string): Promise<string> {
   });
   const exp = Number(new URL(url).searchParams.get("expire")) || Date.now() / 1000 + 3 * 3600;
   urls.set(videoId, { url, exp: exp - 300 });
+  db.run("INSERT OR REPLACE INTO yt_urls VALUES (?, ?, ?)", [videoId, url, Math.floor(exp - 300)]);
   return url;
 }

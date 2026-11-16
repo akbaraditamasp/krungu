@@ -217,6 +217,7 @@ async function showOnboarding() {
     }, 250);
   };
   $("start").onclick = async () => {
+    unlock();
     $("start").disabled = true;
     const r = await api("/users", { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ trackIds: [...picked.keys()] }) });
@@ -231,6 +232,7 @@ async function showOnboarding() {
 // starts/ends (YouTube files carry ~1 s of silence in front and 3-7 s behind) and how loud it is (gainDb <= 0: loud songs are
 // turned down toward a common level, quiet ones are left alone). Without that data a song simply ends and the next one starts.
 const XFADE = 4;            // seconds two songs overlap
+const PREFETCH_AT = 4;      // seconds into a song before the next one is picked and buffered
 let ac = null;
 let crossing = false;       // a crossfade is running
 let nextReady = null;       // the prefetched next item, once loaded
@@ -243,14 +245,32 @@ function ramp(item, to, secs) {
   const g = item.gain.gain, t = ctx().currentTime;
   g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(to, t + Math.max(0.01, secs));
 }
-function wire(item) {       // connect the element to its gain node, once
+// iOS Safari only lets an <audio> element play() (and an AudioContext make sound) if it was started inside a tap. Our songs
+// start later (after fetches, timers, crossfades), so a small pool of elements is "unlocked" during a tap and reused for every song.
+const SILENT = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+const pool = Array.from({ length: 3 }, () => { const el = new Audio(); el.preload = "auto"; el.playsInline = true; return { el, busy: false, src: null }; });
+function unlock() {         // call synchronously from a tap handler
+  try { const c = ctx(); if (c.state !== "running") c.resume().catch(() => {}); } catch {}
+  for (const p of pool) {
+    if (p.busy || p.unlocked) continue;
+    p.unlocked = true;
+    p.el.src = SILENT;
+    p.el.play().then(() => { if (!p.busy) p.el.pause(); }).catch(() => { p.unlocked = false; });
+  }
+}
+function takeEl() { const p = pool.find((x) => !x.busy); if (p) p.busy = true; return p ?? null; }
+function giveEl(p) { if (!p) return; p.busy = false; p.el.onended = p.el.onerror = p.el.ontimeupdate = null; try { p.el.pause(); } catch {} }
+function wire(item) {       // connect the element to its gain node, once per song
   if (item.gain || item.wired) return;
   item.wired = true;
   try {
     const c = ctx();
     const g = c.createGain();
     g.gain.value = 0;
-    c.createMediaElementSource(item.el).connect(g).connect(c.destination);
+    const p = item.slot;
+    p.node ??= c.createMediaElementSource(p.el); // an element can only get one source node: keep it with the slot
+    try { p.node.disconnect(); } catch {}
+    p.node.connect(g).connect(c.destination);
     item.gain = g;
     if (c.state === "suspended") c.resume().catch(() => {});
   } catch { item.gain = null; } // no Web Audio: plain playback, no crossfade
@@ -259,6 +279,8 @@ function stopItem(item) {
   item.dead = true;
   item.el.pause();
   item.el.ontimeupdate = item.el.onended = item.el.onerror = null;
+  if (item.gain) { try { item.gain.disconnect(); } catch {} }
+  giveEl(item.slot);
 }
 function quiet(item) {      // short fade instead of a click when a song is cut off
   if (!item.gain) { stopItem(item); return; }
@@ -281,19 +303,26 @@ async function loadNext() {
     try { track = await api(`/users/${userId}/next`); } catch (e) { if (e.status === 404) { reset(); throw e; } continue; }
     let audio;
     try { audio = await api(`/tracks/${track.trackId}/audio`); } catch { continue; } // no acceptable YouTube match: try another
-    const el = new Audio();
-    el.preload = "auto";
+    const slot = takeEl();
+    if (!slot) continue;
+    const el = slot.el;
+    el.onended = el.onerror = el.ontimeupdate = null;
     el.src = audio.url;
+    el.load();
+    // iOS ignores preload and may never fire "canplay" before play(): metadata is enough to call the song ready
     const ready = await new Promise((res) => {
-      el.addEventListener("canplay", () => res(true), { once: true });
-      el.addEventListener("error", () => res(false), { once: true });
-      setTimeout(() => res(false), 15000);
+      const ok = () => res(true), bad = () => res(false);
+      el.addEventListener("canplay", ok, { once: true });
+      el.addEventListener("loadedmetadata", ok, { once: true });
+      el.addEventListener("error", bad, { once: true });
+      setTimeout(bad, 15000);
     });
     if (ready) {
-      const item = { track, el, mix: null, gain: null, wired: false, dead: false };
+      const item = { track, el, slot, mix: null, gain: null, wired: false, dead: false };
       fetchMix(item);
       return item;
     }
+    giveEl(slot);
   }
   throw new Error("tidak menemukan lagu yang bisa diputar");
 }
@@ -321,8 +350,8 @@ function attach(item) {     // handlers belong to the item, so a song that is fa
     const start = item.mix?.start ?? 0, d = el.duration || track.durationMs / 1000;
     $("fill").style.width = `${Math.min(100, (el.currentTime / d) * 100)}%`;
     $("time").textContent = `${fmt(el.currentTime)} / ${fmt(d)}`;
-    // After the early-skip window, line up the next track so a spin (or the song ending) is instant.
-    if (!prefetched && el.currentTime >= start + 12) { prefetched = true; prefetch(); }
+    // Line up the next track early (the server is slow to resolve a song: ~6-15 s) so a spin or the song ending is instant.
+    if (!prefetched && el.currentTime >= start + PREFETCH_AT) { prefetched = true; prefetch(); }
     // Both songs analysed and the next one buffered: start blending before the music ends.
     if (!crossing && item.mix && nextReady?.mix && el.currentTime >= item.mix.end - XFADE) crossfade();
   };
@@ -401,7 +430,7 @@ function showPlayer(fresh) {
 
 function reset() { saveUser(null); userId = null; cur = null; next = null; location.reload(); }
 
-$("spin").onclick = () => { cur ? spin() : advance(); };
+$("spin").onclick = () => { unlock(); cur ? spin() : advance(); };
 $("reset").onclick = () => { if (confirm("Mulai ulang dari onboarding? Profil lama tidak dipakai lagi.")) reset(); };
 $("dbg").onclick = async () => {
   const box = $("dbgout");
