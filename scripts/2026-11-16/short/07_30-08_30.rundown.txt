@@ -1,0 +1,34 @@
+# GAS TERUS! 07:30-08:30, short-break version: 9 voices (V-01..V-09 = "# VOICE 1..9" of 07_30-08_30.md), 14 songs
+# Songs are NOT pinned: Krungu picks them at every render (taste mode, new random seed each time), and the voices never name them.
+artists: Sheila On 7,The Changcuters,Naif,Kotak,Cokelat,Maliq & D'Essentials   # upbeat pop / pop-rock for a morning show
+prefer: happy,energetic
+avoid: sad,romantic,chill
+energy: 4                   # morning: only songs labeled energy 4-5 (data/song-tags.csv, labeled by Claude from title+artist, owner corrects)
+hits: 12                    # only each seed artist's top-12 songs on Last.fm: songs everybody knows (Deezer rank is unreliable)
+exclude: Haddad Alwi,Ashanty,Broery Marantika
+
+voice V-01 bed=morning-1 up=8   # opening, intro music keeps going until song 1 ("Check this out")
+song 2
+voice V-02                      # traffic / patience
+song 1
+bumper id-1
+song 1
+voice V-03                      # breakfast
+song 1
+stinger whoosh-1
+voice V-04                      # segment "Satu Hal Kecil"
+song 1
+bumper id-2
+song 1
+voice V-05                      # for listeners who just tuned in
+song 1
+voice V-06                      # "Pertanyaan pagi"
+song 1
+bumper id-3
+song 2
+voice V-07                      # water
+song 1
+voice V-08                      # a heavy morning is normal
+song 2
+voice V-09                      # sign-off
+bumper outro

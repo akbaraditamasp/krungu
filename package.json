@@ -28,6 +28,12 @@
     "embed:test": "bun run src/embed.ts test",
     "trace": "bun run src/trace.ts",
     "export": "bun run src/export.ts",
+    "playlist": "bun run src/playlist.ts",
+    "pop": "bun run src/pop.ts",
+    "playlist:pin": "bun run src/pin-playlist.ts",
+    "mix": "bun run src/mix.ts",
+    "chain": "bun run src/chain.ts",
+    "rundown": "bun run src/rundown.ts",
     "serve": "bun run src/server.ts"
   },
   "devDependencies": {

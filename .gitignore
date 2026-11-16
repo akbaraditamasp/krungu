@@ -40,3 +40,6 @@ krungu.db-wal
 *.log
 out/
 .venv/
+
+# raw downloads for placeholder assets
+assets/_raw/

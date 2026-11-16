@@ -1,0 +1,13 @@
+# GAS TERUS! 07:30-08:30 (proof of concept: only VOICE 1 and 2 recorded so far)
+artists: Hindia,Nadin Amizah,Juicy Luicy,Raisa
+minFam: 0.4
+
+voice VOICE-1 bed=morning-1 up=8   # intro music plays 8 s alone, ducks under the voice, keeps going until song 1 comes in
+song 2
+bumper id-1
+song 1
+voice VOICE-2                      # follows a song: its outro already plays as the bed
+stinger whoosh-1
+song 1
+bumper id-2
+bumper outro
