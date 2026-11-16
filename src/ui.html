@@ -371,7 +371,10 @@ function attach(item) {     // handlers belong to the item, so a song that is fa
   let prefetched = false;
   el.ontimeupdate = () => {
     if (item !== cur) return;
-    const start = item.mix?.start ?? 0, d = el.duration || track.durationMs / 1000;
+    const start = item.mix?.start ?? 0, tdur = track.durationMs / 1000,
+      // Safari guesses the length of the streamed fragmented mp4 from the bytes it has seen (a constant, wrong value): trust
+      // the catalog's duration when the element's differs by more than 15 s
+      d = Number.isFinite(el.duration) && Math.abs(el.duration - tdur) <= 15 ? el.duration : tdur;
     $("fill").style.width = `${Math.min(100, (el.currentTime / d) * 100)}%`;
     $("time").textContent = `${fmt(el.currentTime)} / ${fmt(d)}`;
     // Line up the next track early (the server is slow to resolve a song: ~6-15 s) so a spin or the song ending is instant.
