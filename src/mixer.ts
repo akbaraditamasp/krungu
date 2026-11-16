@@ -30,7 +30,7 @@ const WINGET = `${process.env.LOCALAPPDATA ?? ""}/Microsoft/WinGet/Links`;
 export const bin = (n: string) => process.env[n.toUpperCase()] ?? Bun.which(n) ?? `${WINGET}/${n}.exe`;
 const YTDLP = process.env.YTDLP ?? `${import.meta.dir}/../.venv/${process.platform === "win32" ? "Scripts/yt-dlp.exe" : "bin/yt-dlp"}`;
 
-async function runBoth(cmd: string[]): Promise<{ out: string; err: string }> {
+export async function runBoth(cmd: string[]): Promise<{ out: string; err: string }> {
   const p = Bun.spawn(cmd, { stdout: "pipe", stderr: "pipe" });
   const [out, err] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
   if ((await p.exited) !== 0) throw new Error(`${cmd[0]} failed: ${err.trim().split(/\r?\n/).slice(-4).join("\n")}`);

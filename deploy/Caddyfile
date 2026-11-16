@@ -1,0 +1,18 @@
+# /etc/caddy/Caddyfile  (replace radio.example.com with your domain; its DNS A record must point at this server)
+radio.example.com {
+	# The API has NO authentication yet (local prototype) and the audio path goes through YouTube: keep it private.
+	# Create the hash with:  caddy hash-password
+	basic_auth {
+		akbar PASTE_BCRYPT_HASH_HERE
+	}
+
+	# flush_interval -1: do not buffer; the audio proxy streams ranges of up to 4 MB
+	reverse_proxy 127.0.0.1:4020 {
+		flush_interval -1
+	}
+
+	encode zstd gzip
+	log {
+		output file /var/log/caddy/krungu.log
+	}
+}

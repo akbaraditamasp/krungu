@@ -4,6 +4,7 @@
 import { db } from "./db.ts";
 import { learnedWeights, loadCatalog, pickNext, Profile, type Track } from "./radio.ts";
 import { forgetUrl, matchTrack, streamUrl } from "./youtube.ts";
+import { cachedMix, ensureMix } from "./trackmix.ts";
 
 const catalog = loadCatalog();
 const byId = new Map(catalog.map((t) => [t.id, t]));
@@ -87,6 +88,7 @@ Bun.serve({
       try {
         const m = await matchTrack(t);
         if (!m) { blocked.add(t.id); return json({ error: "no acceptable match" }, 404); }
+        ensureMix(t.id, m.videoId); // start analysing in the background (music bounds + loudness for crossfades), never waits
         await streamUrl(m.videoId); // resolve now so the stream route below is instant (and failures show up here)
         // Same-origin proxy URL: googlevideo itself rejects browser requests (see /stream below)
         return json({ url: `/tracks/${t.id}/stream`, videoId: m.videoId, durationMs: m.durationS * 1000, matchedTitle: m.title });
@@ -94,6 +96,20 @@ Bun.serve({
         console.warn(`audio ${t.artist} - ${t.title}:`, (e as Error).message);
         return json({ error: "resolve failed, try again" }, 502);
       }
+    }
+
+    // Per-song mix data for the web player's crossfades: 200 {start,end,duration,gainDb} | 202 still analysing | 404 cannot be analysed
+    const mx = path.match(/^\/tracks\/(\d+)\/mix$/);
+    if (req.method === "GET" && mx) {
+      const t = byId.get(Number(mx[1]));
+      if (!t) return json({ error: "unknown track" }, 404);
+      const hit = cachedMix(t.id);
+      if (hit) return json(hit);
+      const m = await matchTrack(t).catch(() => null);
+      if (!m) return json({ error: "no match" }, 404);
+      const st = ensureMix(t.id, m.videoId);
+      if (st === "failed") return json({ error: "analysis failed" }, 404);
+      return json(cachedMix(t.id) ?? { pending: true }, cachedMix(t.id) ? 200 : 202);
     }
 
     // Audio proxy. googlevideo answers 403 (and sends no CORS headers) to the open-ended `Range: bytes=0-` that browsers

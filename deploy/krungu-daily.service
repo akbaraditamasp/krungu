@@ -1,0 +1,14 @@
+[Unit]
+Description=Krungu daily catalog growth (refresh, explore, country, tags, years, clean, moods)
+
+[Service]
+Type=oneshot
+User=krungu
+Group=krungu
+WorkingDirectory=/opt/krungu
+Environment=PATH=/opt/krungu/.venv/bin:/home/krungu/.bun/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=-/opt/krungu/.env
+ExecStart=/home/krungu/.bun/bin/bun run daily
+# the job is long and rate-limited (Deezer / Last.fm / MusicBrainz): do not let systemd kill it
+TimeoutStartSec=6h
+Nice=10

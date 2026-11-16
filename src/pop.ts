@@ -46,7 +46,26 @@ export async function ensurePop(artists: { id: number; name: string }[], maxAgeD
   }
 }
 
-if (import.meta.main) {
+// bun run pop:all [--refresh]   every local artist that has playable songs (~700, about 4 minutes, resumable: artists fetched in the
+// last 30 days are skipped unless --refresh). Needs LASTFM_API_KEY in .env; only artist names are sent to Last.fm.
+if (import.meta.main && process.argv[2] === "all") {
+  const force = process.argv.includes("--refresh");
+  const artists = db.query(
+    `SELECT a.id, a.name FROM artists a WHERE a.local_seed = 1 AND EXISTS (SELECT 1 FROM tracks t WHERE t.artist_id = a.id AND t.playable = 1) ORDER BY a.id`,
+  ).all() as { id: number; name: string }[];
+  console.log(`${artists.length} local artists with playable songs${force ? " (refreshing all)" : ""}`);
+  const t0 = Date.now();
+  let i = 0;
+  for (const a of artists) {
+    await ensurePop([a], force ? 0 : 30);
+    if (++i % 25 === 0 || i === artists.length) {
+      const left = Math.round(((Date.now() - t0) / i) * (artists.length - i) / 1000);
+      console.log(`${i}/${artists.length}  (~${left}s left)`);
+    }
+  }
+  const n = db.query("SELECT COUNT(DISTINCT artist_id) n FROM lfm_top_tracks").get() as { n: number };
+  console.log(`done: ${n.n} artists have Last.fm popularity cached`);
+} else if (import.meta.main) {
   const { seedArtists } = await import("./playlist.ts");
   const names = (process.argv[2] ?? "").split(",").map((s) => s.trim()).filter(Boolean);
   const arts = seedArtists(names);

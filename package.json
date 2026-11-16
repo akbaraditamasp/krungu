@@ -30,6 +30,7 @@
     "export": "bun run src/export.ts",
     "playlist": "bun run src/playlist.ts",
     "pop": "bun run src/pop.ts",
+    "pop:all": "bun run src/pop.ts all",
     "playlist:pin": "bun run src/pin-playlist.ts",
     "mix": "bun run src/mix.ts",
     "chain": "bun run src/chain.ts",

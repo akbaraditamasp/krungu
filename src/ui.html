@@ -226,6 +226,54 @@ async function showOnboarding() {
   draw();
 }
 
+// ---------- audio graph: crossfade + loudness ----------
+// Every song plays through its own GainNode so two songs can overlap. The server measures per song where the music really
+// starts/ends (YouTube files carry ~1 s of silence in front and 3-7 s behind) and how loud it is (gainDb <= 0: loud songs are
+// turned down toward a common level, quiet ones are left alone). Without that data a song simply ends and the next one starts.
+const XFADE = 4;            // seconds two songs overlap
+let ac = null;
+let crossing = false;       // a crossfade is running
+let nextReady = null;       // the prefetched next item, once loaded
+let fading = null;          // the song that is fading out during a crossfade
+const ctx = () => (ac ??= new (window.AudioContext || window.webkitAudioContext)());
+const level = (item) => 10 ** ((item.mix?.gainDb ?? 0) / 20);
+
+function ramp(item, to, secs) {
+  if (!item.gain) { item.el.volume = to > 0 ? 1 : 0; return; }
+  const g = item.gain.gain, t = ctx().currentTime;
+  g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(to, t + Math.max(0.01, secs));
+}
+function wire(item) {       // connect the element to its gain node, once
+  if (item.gain || item.wired) return;
+  item.wired = true;
+  try {
+    const c = ctx();
+    const g = c.createGain();
+    g.gain.value = 0;
+    c.createMediaElementSource(item.el).connect(g).connect(c.destination);
+    item.gain = g;
+    if (c.state === "suspended") c.resume().catch(() => {});
+  } catch { item.gain = null; } // no Web Audio: plain playback, no crossfade
+}
+function stopItem(item) {
+  item.dead = true;
+  item.el.pause();
+  item.el.ontimeupdate = item.el.onended = item.el.onerror = null;
+}
+function quiet(item) {      // short fade instead of a click when a song is cut off
+  if (!item.gain) { stopItem(item); return; }
+  ramp(item, 0, 0.12);
+  setTimeout(() => stopItem(item), 150);
+}
+async function fetchMix(item) { // the server analyses songs in the background: poll until it has this one
+  for (let i = 0; i < 20 && !item.dead; i++) {
+    const r = await fetch(`/tracks/${item.track.trackId}/mix`).catch(() => null);
+    if (r && r.status === 200) { item.mix = await r.json(); return; }
+    if (!r || r.status !== 202) return; // 404: cannot be analysed, plain playback
+    await new Promise((res) => setTimeout(res, 3000));
+  }
+}
+
 // ---------- fetching the next track (pick + resolve audio + buffer) ----------
 async function loadNext() {
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -241,15 +289,19 @@ async function loadNext() {
       el.addEventListener("error", () => res(false), { once: true });
       setTimeout(() => res(false), 15000);
     });
-    if (ready) return { track, el };
+    if (ready) {
+      const item = { track, el, mix: null, gain: null, wired: false, dead: false };
+      fetchMix(item);
+      return item;
+    }
   }
   throw new Error("tidak menemukan lagu yang bisa diputar");
 }
+const prefetch = () => { next = loadNext().then((n) => (nextReady = n, n)).catch(() => null); };
 
 // ---------- playback ----------
-function begin(item) {
-  cur = item;
-  const { track, el } = item;
+function show(item) {
+  const { track } = item;
   $("title").textContent = track.title;
   $("artist").textContent = track.artist;
   $("art").classList.add("spin");
@@ -259,31 +311,69 @@ function begin(item) {
     navigator.mediaSession.setActionHandler("nexttrack", spin);
     navigator.mediaSession.setActionHandler("previoustrack", null);
   }
+}
+
+function attach(item) {     // handlers belong to the item, so a song that is fading out never touches the UI
+  const { track, el } = item;
   let prefetched = false;
   el.ontimeupdate = () => {
-    const d = el.duration || track.durationMs / 1000;
+    if (item !== cur) return;
+    const start = item.mix?.start ?? 0, d = el.duration || track.durationMs / 1000;
     $("fill").style.width = `${Math.min(100, (el.currentTime / d) * 100)}%`;
     $("time").textContent = `${fmt(el.currentTime)} / ${fmt(d)}`;
     // After the early-skip window, line up the next track so a spin (or the song ending) is instant.
-    if (!prefetched && el.currentTime >= 12) { prefetched = true; next = loadNext().catch(() => null); }
+    if (!prefetched && el.currentTime >= start + 12) { prefetched = true; prefetch(); }
+    // Both songs analysed and the next one buffered: start blending before the music ends.
+    if (!crossing && item.mix && nextReady?.mix && el.currentTime >= item.mix.end - XFADE) crossfade();
   };
-  el.onended = () => finish("complete");
-  el.onerror = () => { setStatus("lagu gagal diputar, lanjut..."); advance(); }; // no event: it never really played
-  el.play().catch(() => setStatus("tekan SPIN untuk mulai"));
+  el.onended = () => { if (item === cur) finish("complete"); };
+  el.onerror = () => { if (item === cur) { setStatus("lagu gagal diputar, lanjut..."); advance(); } }; // no event: it never really played
 }
 
-function sendEvent(action, listenedMs) {
-  if (!cur) return;
+function startPlaying(item, fadeSecs) {
+  wire(item);
+  const start = item.mix?.start ?? 0;
+  if (start > 0.3) { try { item.el.currentTime = start; } catch {} } // skip the silence in front
+  if (item.gain) { item.gain.gain.value = 0; ramp(item, level(item), fadeSecs); }
+  item.el.play().catch(() => setStatus("tekan SPIN untuk mulai"));
+}
+
+function begin(item) {
+  cur = item;
+  show(item); attach(item);
+  startPlaying(item, 0.15);
+}
+
+function crossfade() {
+  const from = cur, to = nextReady;
+  if (crossing || !from || !to) return;
+  crossing = true;
+  next = null; nextReady = null;
+  sendEvent(from, "complete", from.track.durationMs); // it reached the end of its music
+  from.el.ontimeupdate = from.el.onended = from.el.onerror = null;
+  fading = from;
+  ramp(from, 0, XFADE);
+  cur = to;
+  show(to); attach(to);
+  startPlaying(to, XFADE);
+  setTimeout(() => { if (fading === from) { stopItem(from); fading = null; } crossing = false; }, XFADE * 1000 + 200);
+}
+
+function sendEvent(item, action, listenedMs) {
+  if (!item) return;
   fetch(`/users/${userId}/events`, { method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ trackId: cur.track.trackId, action, listenedMs: Math.round(listenedMs), mode: cur.track.mode }) }).catch(() => {});
+    body: JSON.stringify({ trackId: item.track.trackId, action, listenedMs: Math.round(listenedMs), mode: item.track.mode }) }).catch(() => {});
 }
 
 async function finish(action) {
   if (!cur || busy) return;
-  const { el, track } = cur;
-  const listened = action === "complete" ? track.durationMs : el.currentTime * 1000;
-  el.pause(); el.ontimeupdate = el.onended = el.onerror = null;
-  sendEvent(action, listened);
+  const item = cur, { el, track } = item;
+  const start = item.mix?.start ?? 0;
+  const listened = action === "complete" ? track.durationMs : Math.max(0, el.currentTime - start) * 1000;
+  el.ontimeupdate = el.onended = el.onerror = null;
+  quiet(item);
+  if (fading) { stopItem(fading); fading = null; }
+  sendEvent(item, action, listened);
   advance();
 }
 
@@ -293,7 +383,7 @@ async function advance() {
     const wasReady = next;
     setStatus(wasReady ? "" : "memilih lagu...");
     const item = await (next ?? loadNext());
-    next = null;
+    next = null; nextReady = null;
     if (!item) throw new Error("gagal menyiapkan lagu");
     setStatus("");
     begin(item);

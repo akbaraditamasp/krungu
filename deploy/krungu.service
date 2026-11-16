@@ -1,0 +1,28 @@
+[Unit]
+Description=Krungu radio API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=krungu
+Group=krungu
+# src/db.ts opens "krungu.db" relative to the working directory
+WorkingDirectory=/opt/krungu
+# the API listens on localhost only; Caddy is the public face
+Environment=HOST=127.0.0.1
+Environment=PORT=4020
+# .venv/bin = yt-dlp, /usr/bin = ffmpeg + ffprobe (apt), bun from the krungu user's home
+Environment=PATH=/opt/krungu/.venv/bin:/home/krungu/.bun/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=-/opt/krungu/.env
+ExecStart=/home/krungu/.bun/bin/bun run src/server.ts
+Restart=on-failure
+RestartSec=3
+# hardening: the service only needs to write inside /opt/krungu (krungu.db, out/web-songs, logs)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/krungu
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target
